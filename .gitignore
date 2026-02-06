@@ -1,0 +1,51 @@
+# Python
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Entornos virtuales
+ENV/
+env.bak/
+venv.bak/
+
+# Variables de entorno (credenciales sensibles)
+.env
+.env.local
+
+# Playwright
+playwright-report/
+test-results/
+*.trace
+
+# Screenshots y capturas generadas por el bot
+error_*.png
+screenshot_*.png
+*.jpg
+*.jpeg
+
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# Node modules (si se usa Playwright con npm)
+node_modules/
+package-lock.json

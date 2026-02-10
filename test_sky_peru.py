@@ -209,15 +209,29 @@ def run(playwright: Playwright) -> None:
     # 4. CHECKOUT Y PAGO
     # -------------------------------------------
     print("--- Llegada al Checkout ---")
-    expect(page).to_have_url(re.compile(".*checkout"), timeout=30000)
-    
+
+    try:
+        expect(page).to_have_url(re.compile(".*checkout"), timeout=30000)
+    except Exception as e:
+        print(f"⚠️ No se pudo llegar al checkout en 30s: {e}")
+        print("🖱️ Activando modo manual - continúa tú desde aquí")
+        page.pause()
+        return
+
     print("--- Iniciando Pago Niubiz ---")
-    page.wait_for_selector('text="Niubiz"', timeout=45000)
-    
+
+    try:
+        page.wait_for_selector('text="Niubiz"', timeout=45000)
+    except Exception as e:
+        print(f"⚠️ Niubiz no apareció en 45s: {e}")
+        print("🖱️ Activando modo manual - continúa tú desde aquí")
+        page.pause()
+        return
+
     niubiz_btn = page.locator("div").filter(has_text="Niubiz").last
     niubiz_btn.scroll_into_view_if_needed()
     niubiz_btn.click(force=True)
-    
+
     print("Esperando animación del formulario...")
     page.wait_for_timeout(5000) 
 
@@ -301,8 +315,12 @@ def run(playwright: Playwright) -> None:
         except Exception as e:
             print(f"❌ Error durante la interacción final: {e}")
             page.screenshot(path="error_interaccion.png")
+            print("🖱️ Activando modo manual - continúa tú desde aquí")
+            page.pause()
     else:
-        print("❌ Error: Nunca apareció el texto 'Número de Tarjeta'.")
+        print("❌ Error: Nunca apareció el campo 'Número de Tarjeta'.")
+        print("🖱️ Activando modo manual - continúa tú desde aquí")
+        page.pause()
 
     # Pausa final para ver el resultado
     print("✅ Fin del script.")

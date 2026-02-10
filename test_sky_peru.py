@@ -107,12 +107,18 @@ def run(playwright: Playwright) -> None:
         page.wait_for_selector('button:has-text("Elegir vuelo"), [data-test^="is-itinerary-selectFlight"]', timeout=30000)
     except: pass
 
+    # Pausa adicional para que las cards terminen de cargar
+    print("⏳ Esperando a que las cards de vuelo carguen completamente...")
+    page.wait_for_timeout(2500)  # 2.5 segundos adicionales
+
     btns = page.locator('button:has-text("Elegir vuelo")')
     if btns.count() == 0: btns = page.locator('[data-test^="is-itinerary-selectFlight"]')
-    
+
     seleccionado = False
     for i in range(btns.count()):
         try:
+            btns.nth(i).scroll_into_view_if_needed()  # Asegurar visibilidad
+            page.wait_for_timeout(500)  # Pequeña pausa después del scroll
             btns.nth(i).click(force=True)
             page.wait_for_selector('[data-test^="is-itinerary-selectRate"]', timeout=5000)
             seleccionado = True
@@ -199,20 +205,12 @@ def run(playwright: Playwright) -> None:
         if btn_mod.is_visible(timeout=5000): btn_mod.click(force=True)
     except: pass
 
-    # 🛑 Checkpoint: Después de datos del pasajero
-    if pausar_en_checkpoint(page, "DATOS_PASAJERO"):
-        return
-
     # -------------------------------------------
     # 4. CHECKOUT Y PAGO
     # -------------------------------------------
     print("--- Llegada al Checkout ---")
     expect(page).to_have_url(re.compile(".*checkout"), timeout=30000)
-
-    # 🛑 Checkpoint: En el checkout
-    if pausar_en_checkpoint(page, "CHECKOUT"):
-        return
-
+    
     print("--- Iniciando Pago Niubiz ---")
     page.wait_for_selector('text="Niubiz"', timeout=45000)
     
@@ -277,11 +275,7 @@ def run(playwright: Playwright) -> None:
             page.keyboard.press("Tab")
             print(f"⌨️ CVV: {TARJETA['cvv']}")
             page.keyboard.type(TARJETA["cvv"], delay=100)
-
-            # 🛑 Checkpoint: Después de llenar datos de pago
-            if pausar_en_checkpoint(page, "PAGO"):
-                return
-
+            
             # -------------------------------------------
             # 5. FINALIZAR COMPRA
             # -------------------------------------------

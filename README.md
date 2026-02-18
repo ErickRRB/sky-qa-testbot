@@ -48,14 +48,21 @@ playwright install chromium
 
 ## ⚙️ Configuración
 
-Antes de ejecutar el bot, puedes personalizar los parámetros en el archivo `test_sky_peru.py`:
+Antes de ejecutar el bot, puedes personalizar los parámetros en la carpeta `config/` o pasarlos por CLI en `test_sky.py`:
 
 ### Configuración del vuelo:
 ```python
 VUELO_ORIGEN = "Santiago"
 VUELO_DESTINO = "La Serena"
 DIAS_A_FUTURO = 16  # Día a seleccionar en el calendario
+TIPO_VIAJE = "ONE_WAY"  # ONE_WAY o ROUND_TRIP
+DIAS_RETORNO_DESDE_IDA = 4  # Solo para ROUND_TRIP
+CANTIDAD_ADULTOS = 1
+CANTIDAD_NINOS = 0
+CANTIDAD_INFANTES = 0
 ```
+
+> El bot fuerza un mínimo de 16 días de anticipación por validación antifraude.
 
 ### Datos del pasajero:
 ```python
@@ -118,8 +125,25 @@ Cuando el bot alcance el checkpoint, verás el inspector de Playwright donde pod
 ### Ejecutar el bot:
 
 ```bash
-python test_sky_peru.py
+python test_sky.py
 ```
+
+### Ejemplos útiles:
+
+```bash
+# Ida y vuelta, manteniendo fecha > 16 días
+python test_sky.py --market PE --tipo-viaje ROUND_TRIP --dias 16 --dias-retorno 5
+
+# 3 adultos + 1 niño
+python test_sky.py --market PE --adultos 3 --ninos 1 --dias 16
+
+# Modo exploración UI (captura screenshots + reporte de controles y se detiene tras búsqueda)
+python test_sky.py --market PE --tipo-viaje ROUND_TRIP --adultos 2 --ninos 1 --modo-exploracion --solo-exploracion
+```
+
+En modo exploración, el bot guarda evidencia en:
+- `screenshots_pruebas/exploracion_<timestamp>/*.png`
+- `screenshots_pruebas/exploracion_<timestamp>/*.txt`
 
 El bot se ejecutará con las siguientes características:
 - **Navegador visible** (`headless=False`) para que puedas ver el proceso

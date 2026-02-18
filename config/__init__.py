@@ -1,5 +1,15 @@
 from config.rutas import TIEMPO_PAUSA_SEGURIDAD, VELOCIDAD_VISUAL
-from config.vuelo import VUELO_ORIGEN, VUELO_DESTINO, DIAS_A_FUTURO
+from config.vuelo import (
+    VUELO_ORIGEN,
+    VUELO_DESTINO,
+    MIN_DIAS_A_FUTURO,
+    DIAS_A_FUTURO,
+    TIPO_VIAJE,
+    DIAS_RETORNO_DESDE_IDA,
+    CANTIDAD_ADULTOS,
+    CANTIDAD_NINOS,
+    CANTIDAD_INFANTES,
+)
 from config.pasajero import PASAJERO
 from config.pago import (
     HOME_MARKET,
@@ -14,7 +24,13 @@ __all__ = [
     "VELOCIDAD_VISUAL",
     "VUELO_ORIGEN",
     "VUELO_DESTINO",
+    "MIN_DIAS_A_FUTURO",
     "DIAS_A_FUTURO",
+    "TIPO_VIAJE",
+    "DIAS_RETORNO_DESDE_IDA",
+    "CANTIDAD_ADULTOS",
+    "CANTIDAD_NINOS",
+    "CANTIDAD_INFANTES",
     "PASAJERO",
     "HOME_MARKET",
     "URLS_POR_MARKET",

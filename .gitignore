@@ -22,6 +22,7 @@ test-results/
 *.trace
 
 # Screenshots y capturas generadas por el bot
+screenshots_pruebas/
 error_*.png
 screenshot_*.png
 *.jpg

@@ -4,7 +4,7 @@ Comandos listos para copiar y pegar.
 
 ## Preparación
 ```bash
-cd /Users/erick/Sky/bot-skyairline
+cd bot-skyairline
 source venv/bin/activate
 ```
 

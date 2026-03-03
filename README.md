@@ -15,8 +15,12 @@ Este bot automatiza el proceso completo de compra de un vuelo en el sitio de Sky
 
 ## 🔧 Requisitos Previos
 
-- Python 3.8 o superior
-- pip (gestor de paquetes de Python)
+- macOS (prioridad del proyecto) con shell `bash`/`zsh`
+- Python 3.10 o superior con soporte `tkinter`
+- `pip` (gestor de paquetes de Python)
+- `git`
+- Conexión a internet (para Playwright + sitio objetivo)
+- Opcional: Google Chrome instalado (si usarás modo **Chrome abierto/CDP**)
 
 ## 📦 Instalación
 
@@ -27,7 +31,26 @@ git clone https://github.com/ErickRRB/sky-qa-testbot.git
 cd sky-qa-testbot
 ```
 
-### 2. Crear entorno virtual
+### 2. Arranque rápido (recomendado)
+
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+Alternativa equivalente:
+```bash
+make run
+```
+
+Este comando:
+- crea `venv` si no existe
+- detecta/usa un Python con soporte `tkinter` (requerido para la UI)
+- instala dependencias
+- instala Chromium de Playwright
+- abre la interfaz visual (`gui.py`)
+
+### 3. Instalación manual (opcional)
 
 ```bash
 # En macOS/Linux:
@@ -39,10 +62,10 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
-### 3. Instalar dependencias
+### 4. Instalar dependencias
 
 ```bash
-pip install playwright
+pip install -r requirements.txt
 playwright install chromium
 ```
 
@@ -62,7 +85,7 @@ CANTIDAD_NINOS = 0
 CANTIDAD_INFANTES = 0
 ```
 
-> El bot fuerza un mínimo de 16 días de anticipación por validación antifraude.
+> Si usas menos de 16 días, se muestra advertencia de posible riesgo antifraude, pero se respeta el valor indicado.
 
 ### Datos del pasajero:
 ```python
@@ -93,6 +116,7 @@ TARJETA = {
 ```python
 TIEMPO_PAUSA_SEGURIDAD = 1500  # Pausa antes de interactuar con campos (ms)
 VELOCIDAD_VISUAL = 500          # Velocidad de animación del navegador (ms)
+ESPERA_FINAL_SEGUNDOS = 600     # 10 minutos antes de screenshot final/cierre
 ```
 
 ### 🛑 Checkpoints (Pausas dinámicas):
@@ -122,16 +146,52 @@ Cuando el bot alcance el checkpoint, verás el inspector de Playwright donde pod
 
 ## 🚀 Ejecución
 
+### Opción más simple (1 comando)
+
+```bash
+./run.sh
+```
+
 ### Ejecutar el bot:
 
 ```bash
 python test_sky.py
 ```
 
+### Ejecutar con interfaz visual (sin flags):
+
+```bash
+python gui.py
+```
+
+Desde la interfaz puedes:
+- Elegir un caso desde el dropdown (se aplica automáticamente)
+- Crear, renombrar y eliminar casos personalizados
+- Ejecutar y detener el flujo con botones
+- Ver logs en tiempo real
+- Ajustar la espera final (por defecto 600s = 10 minutos)
+- Usar tu Chrome abierto por CDP (sin abrir una instancia nueva)
+- Guardar automáticamente tus últimos ajustes para próximas ejecuciones
+- Configurar overrides de pasajero/pagador y tarjeta desde la propia UI
+- Caso inicial inmutable: **Solo ida, PE, 1 adulto, flujo completo (sin checkpoint)**
+
+### Usar Chrome ya abierto (CDP)
+
+Desde `gui.py`, marca **Usar Chrome abierto**:
+- si Chrome ya está listo para automatización, se conecta y abre una pestaña nueva para la ejecución
+- si no está listo, usa **Abrir/Preparar Chrome para automatización** y reutiliza la primera pestaña creada
+- `CDP URL` es la dirección técnica de conexión a Chrome (normalmente no necesitas cambiarla)
+
+Si prefieres iniciar Chrome manualmente:
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-cdp-sky
+python test_sky.py --usar-chrome-existente --cdp-url http://127.0.0.1:9222
+```
+
 ### Ejemplos útiles:
 
 ```bash
-# Ida y vuelta, manteniendo fecha > 16 días
+# Ida y vuelta (si usas menos de 16 días, verás advertencia antifraude)
 python test_sky.py --market PE --tipo-viaje ROUND_TRIP --dias 16 --dias-retorno 5
 
 # 3 adultos + 1 niño

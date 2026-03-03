@@ -115,6 +115,7 @@ Ejemplos:
   python test_sky.py --tipo-viaje ROUND_TRIP --dias 16 --dias-retorno 5
   python test_sky.py --adultos 3 --ninos 1 --market PE
   python test_sky.py --market PE --modo-exploracion --solo-exploracion
+  python test_sky.py --usar-chrome-existente --cdp-url http://127.0.0.1:9222
         """,
     )
 
@@ -133,6 +134,27 @@ Ejemplos:
     grupo_rutas.add_argument("--url", type=str, help="URL inicial (override, normalmente se deduce del market)")
     grupo_rutas.add_argument("--pausa", type=int, metavar="MS", help="Tiempo de pausa de seguridad (ms)")
     grupo_rutas.add_argument("--slow-mo", type=int, metavar="MS", help="Velocidad visual slow_mo (ms)")
+    grupo_rutas.add_argument(
+        "--espera-final-segundos",
+        type=_int_no_negativo,
+        metavar="N",
+        help="Espera final antes del screenshot/cierre (segundos)",
+    )
+    grupo_rutas.add_argument(
+        "--usar-chrome-existente",
+        action="store_true",
+        help="Conectar al Chrome ya abierto mediante CDP (requiere --remote-debugging-port)",
+    )
+    grupo_rutas.add_argument(
+        "--cdp-url",
+        type=str,
+        help="URL CDP de Chrome (ej: http://127.0.0.1:9222)",
+    )
+    grupo_rutas.add_argument(
+        "--cdp-reutilizar-primera-pestana",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     grupo_rutas.add_argument("--headless", action="store_true", help="Ejecutar en modo headless (sin ventana)")
     grupo_rutas.add_argument(
         "--modo-exploracion",
@@ -222,6 +244,7 @@ def aplicar_args(args):
     from config import (
         TIEMPO_PAUSA_SEGURIDAD,
         VELOCIDAD_VISUAL,
+        ESPERA_FINAL_SEGUNDOS,
         VUELO_ORIGEN,
         VUELO_DESTINO,
         MIN_DIAS_A_FUTURO,
@@ -247,10 +270,9 @@ def aplicar_args(args):
     dias = args.dias if args.dias is not None else DIAS_A_FUTURO
     if dias < MIN_DIAS_A_FUTURO:
         print(
-            f"⚠️  '--dias {dias}' es menor al mínimo antifraude ({MIN_DIAS_A_FUTURO}). "
-            f"Se ajusta automáticamente a {MIN_DIAS_A_FUTURO}.",
+            f"⚠️  '--dias {dias}' es menor al umbral antifraude sugerido ({MIN_DIAS_A_FUTURO}). "
+            "Se mantiene el valor elegido, pero podría haber mayor riesgo de rechazo en pago.",
         )
-        dias = MIN_DIAS_A_FUTURO
 
     adultos = args.adultos if args.adultos is not None else CANTIDAD_ADULTOS
     ninos = args.ninos if args.ninos is not None else CANTIDAD_NINOS
@@ -280,6 +302,12 @@ def aplicar_args(args):
         "url": args.url or URLS_POR_MARKET[market],
         "pausa": args.pausa if args.pausa is not None else TIEMPO_PAUSA_SEGURIDAD,
         "slow_mo": args.slow_mo if args.slow_mo is not None else VELOCIDAD_VISUAL,
+        "espera_final_segundos": (
+            args.espera_final_segundos if args.espera_final_segundos is not None else ESPERA_FINAL_SEGUNDOS
+        ),
+        "usar_chrome_existente": args.usar_chrome_existente,
+        "cdp_url": args.cdp_url or "http://127.0.0.1:9222",
+        "cdp_reutilizar_primera_pestana": args.cdp_reutilizar_primera_pestana,
         "headless": args.headless,
         "modo_exploracion": args.modo_exploracion or args.solo_exploracion,
         "solo_exploracion": args.solo_exploracion,

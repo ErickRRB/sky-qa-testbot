@@ -1,4 +1,4 @@
-from config.rutas import TIEMPO_PAUSA_SEGURIDAD, VELOCIDAD_VISUAL
+from config.rutas import TIEMPO_PAUSA_SEGURIDAD, VELOCIDAD_VISUAL, ESPERA_FINAL_SEGUNDOS
 from config.vuelo import (
     VUELO_ORIGEN,
     VUELO_DESTINO,
@@ -22,6 +22,7 @@ from config.checkpoint import CHECKPOINT
 __all__ = [
     "TIEMPO_PAUSA_SEGURIDAD",
     "VELOCIDAD_VISUAL",
+    "ESPERA_FINAL_SEGUNDOS",
     "VUELO_ORIGEN",
     "VUELO_DESTINO",
     "MIN_DIAS_A_FUTURO",

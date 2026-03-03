@@ -7,6 +7,11 @@ from playwright.sync_api import Playwright, expect, sync_playwright
 
 from cli import aplicar_args, parse_args
 
+# Evita ruido deprecado del runtime Node usado por Playwright (DEP0169).
+_node_options = os.environ.get("NODE_OPTIONS", "").strip()
+if "--no-deprecation" not in _node_options.split():
+    os.environ["NODE_OPTIONS"] = f"{_node_options} --no-deprecation".strip()
+
 # ==========================================
 # 🤖 INICIO DEL BOT
 # ==========================================
@@ -1112,13 +1117,55 @@ def _rellenar_todos_los_pasajeros(page):
     _click_selector_visible(page, ['button:has-text("Siguiente")', 'button:has-text("Ir al pago")'], force=True)
 
 
-def run(playwright: Playwright) -> None:
-    # Configuración del navegador
+def _obtener_contexto_cdp(browser):
+    if browser.contexts:
+        return browser.contexts[-1]
+    return browser.new_context()
+
+
+def _obtener_pagina_existente(context):
+    if context.pages:
+        return context.pages[0]
+    return None
+
+
+def _crear_sesion_navegador(playwright):
+    if CFG.get("usar_chrome_existente"):
+        cdp_url = CFG.get("cdp_url") or "http://127.0.0.1:9222"
+        print(f"🔌 Conectando a Chrome existente por CDP: {cdp_url}")
+        try:
+            browser = playwright.chromium.connect_over_cdp(cdp_url)
+        except Exception as error:
+            raise RuntimeError(
+                f"No se pudo conectar a Chrome por CDP en {cdp_url}. "
+                "Inicia Chrome con --remote-debugging-port=9222 e inténtalo de nuevo."
+            ) from error
+        context = _obtener_contexto_cdp(browser)
+        if CFG.get("cdp_reutilizar_primera_pestana"):
+            page = _obtener_pagina_existente(context)
+            if page:
+                print("🧭 CDP conectado: usando la primera pestaña disponible.")
+            else:
+                page = context.new_page()
+                print("🧭 CDP conectado: no había pestañas, se abrió una nueva.")
+        else:
+            page = context.new_page()
+            print("🧭 CDP conectado: se abrió una pestaña nueva para esta ejecución.")
+        return browser, context, page, True
+
     browser = playwright.chromium.launch(headless=CFG["headless"], slow_mo=CFG["slow_mo"])
     context = browser.new_context()
     page = context.new_page()
+    return browser, context, page, False
+
+
+def run(playwright: Playwright) -> None:
+    browser = None
+    context = None
+    session_cdp = False
 
     try:
+        browser, context, page, session_cdp = _crear_sesion_navegador(playwright)
         try:
             print(f"--- 🚀 Iniciando Test [{CFG['market']}]: {CFG['origen']} -> {CFG['destino']} ---")
             print(f"    Medio de pago: {CFG['medio_pago']}")
@@ -1248,9 +1295,18 @@ def run(playwright: Playwright) -> None:
             # -------------------------------------------
             # 5. SCREENSHOT FINAL Y CIERRE
             # -------------------------------------------
-            print("⏳ Esperando 2 minutos antes de tomar screenshot final...")
-            print("   (Puedes cerrar el navegador manualmente si deseas salir antes)")
-            page.wait_for_timeout(120000)
+            espera_final_segundos = CFG.get("espera_final_segundos", 600)
+            if espera_final_segundos > 0:
+                minutos, segundos = divmod(espera_final_segundos, 60)
+                if segundos:
+                    espera_legible = f"{minutos}m {segundos}s"
+                else:
+                    espera_legible = f"{minutos} minutos"
+                print(f"⏳ Esperando {espera_legible} antes de tomar screenshot final...")
+                print("   (Puedes cerrar el navegador manualmente si deseas salir antes)")
+                page.wait_for_timeout(espera_final_segundos * 1000)
+            else:
+                print("⏩ Espera final deshabilitada (0 segundos).")
 
             screenshots_dir = "screenshots_pruebas"
             os.makedirs(screenshots_dir, exist_ok=True)
@@ -1267,16 +1323,20 @@ def run(playwright: Playwright) -> None:
             print("✅ Prueba finalizada correctamente.")
 
     finally:
-        # Limpieza garantizada - evita memory leaks
-        print("🧹 Cerrando navegador y contexto...")
-        try:
-            context.close()
-        except Exception as error:
-            print(f"⚠️ Error cerrando contexto: {error}")
-        try:
-            browser.close()
-        except Exception as error:
-            print(f"⚠️ Error cerrando navegador: {error}")
+        if session_cdp:
+            print("🧹 Modo CDP activo: se mantiene abierto el Chrome existente.")
+        else:
+            print("🧹 Cerrando navegador y contexto...")
+            if context:
+                try:
+                    context.close()
+                except Exception as error:
+                    print(f"⚠️ Error cerrando contexto: {error}")
+            if browser:
+                try:
+                    browser.close()
+                except Exception as error:
+                    print(f"⚠️ Error cerrando navegador: {error}")
 
 
 # ==========================================
@@ -1690,3 +1750,5 @@ try:
         run(playwright)
 except KeyboardInterrupt:
     print("\n\n👋 Ejecución interrumpida por el usuario (Ctrl+C). ¡Hasta la próxima!")
+except Exception as error:
+    print(f"\n❌ Error de ejecución: {error}")

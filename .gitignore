@@ -30,6 +30,7 @@ screenshot_*.png
 
 # Logs
 *.log
+.sky_gui_settings.json
 
 # Testing
 .pytest_cache/

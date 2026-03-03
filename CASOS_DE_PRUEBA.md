@@ -2,10 +2,30 @@
 
 Comandos listos para copiar y pegar.
 
+## Arranque más simple (1 comando)
+```bash
+./run.sh
+```
+
 ## Preparación
 ```bash
 cd bot-skyairline
 source venv/bin/activate
+```
+
+## Interfaz visual (sin CLI)
+```bash
+venv/bin/python gui.py
+```
+
+En la UI, si marcas **Usar Chrome abierto** intentará iniciarlo automáticamente si no está activo.
+La UI recuerda tus últimos ajustes (market, pasajeros, checkpoint, etc.) para la siguiente ejecución.
+Los campos de pasajero/tarjeta son opcionales y solo se usan si activas esa opción.
+
+## Usar Chrome abierto (CDP)
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-cdp-sky
+venv/bin/python -u test_sky.py --usar-chrome-existente --cdp-url http://127.0.0.1:9222
 ```
 
 ## Flujos principales (visibles)

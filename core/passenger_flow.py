@@ -206,10 +206,11 @@ def _rellenar_fecha_nacimiento(page, fecha):
     if not contenedor:
         raise RuntimeError("No se encontró el campo de fecha de nacimiento.")
 
+    valores = [str(int(dia)), str(int(mes)), anio]
+
     # Variante A: fecha como 3 selects (día/mes/año)
     selects = contenedor.locator('.ant-select-selector, [role="combobox"]')
     if selects.count() >= 3:
-        valores = [str(int(dia)), str(int(mes)), anio]
         for indice, valor in enumerate(valores):
             campo_select = selects.nth(indice)
             try:
@@ -227,7 +228,6 @@ def _rellenar_fecha_nacimiento(page, fecha):
         return
 
     # Variante B: fecha en inputs
-    valores = [str(int(dia)), str(int(mes)), anio]
     inputs = contenedor.locator("input")
     llenados = 0
 
@@ -318,7 +318,8 @@ def _rellenar_pasajero(page, pasajero, indice, total):
 
 def _rellenar_todos_los_pasajeros(page):
     pasajeros = state.CFG["pasajeros_lista"]
-    print(f"--- Llenando Datos Pasajero ({len(pasajeros)} en total) ---")
+    total = len(pasajeros)
+    print(f"--- Llenando Datos Pasajero ({total} en total) ---")
     _esperar_o_avanzar_hasta_pasajeros(page)
     if "checkout" in (page.url or ""):
         print("⚠️ Flujo ya está en checkout. Se omite carga de pasajeros.")
@@ -328,7 +329,7 @@ def _rellenar_todos_los_pasajeros(page):
     page.wait_for_timeout(1500)
 
     for indice, pasajero in enumerate(pasajeros, start=1):
-        _rellenar_pasajero(page, pasajero, indice, len(pasajeros))
+        _rellenar_pasajero(page, pasajero, indice, total)
 
     _forzar_guardado_tarjetas_pasajero(page, pasajeros)
     print("--- Avanzando a checkout desde pasajeros ---")

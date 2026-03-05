@@ -1,10 +1,13 @@
 import argparse
 from datetime import date
 
+from config.pago import AMBIENTES_DISPONIBLES, MEDIO_PAGO_POR_MARKET as _MEDIO_PAGO
+
+CDP_URL_DEFAULT = "http://127.0.0.1:9222"
 CHECKPOINTS_VALIDOS = ["BUSQUEDA", "SELECCION_TARIFA", "DATOS_PASAJERO", "CHECKOUT", "PAGO"]
-MARKETS_VALIDOS = ["CL", "PE", "AR", "BR"]
+MARKETS_VALIDOS = list(_MEDIO_PAGO.keys())
 TIPOS_VIAJE_VALIDOS = ["ONE_WAY", "ROUND_TRIP"]
-AMBIENTES_VALIDOS = ["qa", "tsts", "stage"]
+AMBIENTES_VALIDOS = list(AMBIENTES_DISPONIBLES.keys())
 
 
 def _int_positivo(value):
@@ -344,7 +347,7 @@ def aplicar_args(args):
             args.espera_final_segundos if args.espera_final_segundos is not None else ESPERA_FINAL_SEGUNDOS
         ),
         "usar_chrome_existente": args.usar_chrome_existente,
-        "cdp_url": args.cdp_url or "http://127.0.0.1:9222",
+        "cdp_url": args.cdp_url or CDP_URL_DEFAULT,
         "cdp_reutilizar_primera_pestana": args.cdp_reutilizar_primera_pestana,
         "headless": args.headless,
         "modo_exploracion": args.modo_exploracion or args.solo_exploracion,

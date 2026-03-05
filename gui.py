@@ -11,6 +11,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
+from cli import CDP_URL_DEFAULT
 from config import (
     CANTIDAD_ADULTOS,
     CANTIDAD_INFANTES,
@@ -34,7 +35,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 PYTHON_EXEC = sys.executable
 
 NO_CHECKPOINT = "NINGUNO"
-CDP_URL_DEFAULT = "http://127.0.0.1:9222"
 CDP_START_TIMEOUT_SEGUNDOS = 12
 GUI_SETTINGS_PATH = PROJECT_ROOT / ".sky_gui_settings.json"
 MARKET_LABEL_TO_CODE = {
@@ -938,7 +938,7 @@ class SkyBotGUI:
     def _market_label_from_value(self, value):
         if value in MARKET_LABEL_TO_CODE:
             return value
-        return MARKET_CODE_TO_LABEL.get(value, "Perú")
+        return MARKET_CODE_TO_LABEL.get(value, MARKET_CODE_TO_LABEL.get(HOME_MARKET, "Perú"))
 
     def _ambiente_code_from_label(self, value):
         if value in AMBIENTE_LABEL_TO_CODE:
@@ -1089,8 +1089,8 @@ class SkyBotGUI:
             return
         try:
             data = json.loads(GUI_SETTINGS_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            self.status_var.set("No se pudo leer la configuración previa")
+        except Exception as error:
+            self.status_var.set(f"No se pudo leer la configuración previa: {error}")
             return
         self._cargar_presets_desde_data(data.get("presets_guardados"))
         self._aplicar_settings(data)
@@ -1153,7 +1153,7 @@ class SkyBotGUI:
             self.genero_override_var.set(PASAJERO.get("genero", ""))
             self.pais_emision_override_var.set(PASAJERO.get("pais_emision", ""))
             self.fecha_nac_override_var.set(PASAJERO.get("fecha_nac", ""))
-            tarjeta_default = TARJETA_POR_MARKET.get("PE", {})
+            tarjeta_default = TARJETA_POR_MARKET.get(HOME_MARKET, {})
             self.tarjeta_numero_override_var.set(tarjeta_default.get("numero", ""))
             self.tarjeta_fecha_override_var.set(tarjeta_default.get("fecha", ""))
             self.tarjeta_cvv_override_var.set(tarjeta_default.get("cvv", ""))

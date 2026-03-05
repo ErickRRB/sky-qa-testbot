@@ -59,10 +59,17 @@ Regla clave:
 
 - No romper compatibilidad de flags existentes sin actualizar GUI + README.
 - No mover lógica de pago a `gui.py`; el flujo real vive en `test_sky.py`.
-- Si se agrega un market, actualizar:
-  - `config/pago.py` (`URLS_POR_MARKET`, `MEDIO_PAGO_POR_MARKET`, `TARJETA_POR_MARKET`)
+- Si se agrega un **market**, actualizar:
+  - `config/pago.py` (`_URLS_BASE`, `MEDIO_PAGO_POR_MARKET`, `TARJETA_POR_MARKET`)
+  - `cli.py` (`MARKETS_VALIDOS`)
+  - `gui.py` (`MARKET_LABEL_TO_CODE`)
   - flujos de pago en `test_sky.py`
   - opciones CLI y docs.
+- Si se agrega un **ambiente**, actualizar:
+  - `config/pago.py` (`AMBIENTES_DISPONIBLES`)
+  - `gui.py` (`AMBIENTE_LABEL_TO_CODE`)
+  - **No tocar** `test_sky.py` ni `URLS_POR_MARKET` directamente.
+- **No usar `URLS_POR_MARKET` para resolver URLs en runtime** — usar `get_urls_por_market(ambiente)`.
 - Evitar clicks por coordenadas cuando exista selector estable.
 
 ## 6. Checklist mínimo antes de entregar cambios

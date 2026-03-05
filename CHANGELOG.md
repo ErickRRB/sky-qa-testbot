@@ -35,6 +35,14 @@ Formato recomendado por entrada:
 - Plantilla de PR para cambios consistentes: `.github/pull_request_template.md`.
 - Estandarización de formato con `.editorconfig`.
 
+### Added (2026-03-05)
+- **Selección de ambiente multi-entorno** (`--ambiente qa|tsts|stage`):
+  - `config/pago.py`: refactorizado con `AMBIENTES_DISPONIBLES`, `_URLS_BASE` y `get_urls_por_market(ambiente)`.
+  - `cli.py`: nuevo flag `--ambiente`.
+  - `gui.py`: combo "Ambiente" en sección Flujo; guardado en settings y presets.
+  - Riesgo: bajo — la URL se resuelve solo en runtime, sin cambios en navegación.
+  - Validar: `python3 -m py_compile cli.py gui.py` + smoke con `--ambiente tsts`.
+
 ### Changed
 - README actualizado con sección AI-first y comandos de validación.
 - `CASOS_DE_PRUEBA.md` corregido para reflejar reglas actuales (`--dias < 16` solo advierte, no fuerza ajuste).

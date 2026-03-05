@@ -99,7 +99,7 @@ def _generar_pasajeros(base, adultos, ninos, infantes):
 def parse_args():
     """Parsea argumentos de línea de comandos para sobreescribir la configuración."""
     parser = argparse.ArgumentParser(
-        description="🤖 Sky QA TestBot — Automatización de compra de vuelos Sky Airline",
+        description="🤖 Sky TestBot — Automatización de compra de vuelos Sky Airline (QA/TSTS/Stage)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Home Markets disponibles:

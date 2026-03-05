@@ -23,6 +23,20 @@ Resumen mínimo para que un agente entienda el repo rápido sin cargar todo el c
 - Defaults de negocio: `config/*.py`
 - One-command startup: `run.sh`
 
+## 3b) Multi-ambiente
+
+El bot soporta 3 ambientes vía `--ambiente`:
+
+| Código | Subdominio           | GUI label |
+|--------|----------------------|-----------|
+| `qa`   | `initial-sale-qa`    | QA        |
+| `tsts` | `initial-sale-tsts`  | TSTS      |
+| `stage`| `initial-sale-stage` | Stage     |
+
+- Fuente de verdad: `config/pago.py` → `AMBIENTES_DISPONIBLES`, `get_urls_por_market()`
+- **No usar `URLS_POR_MARKET` directamente** — es un snapshot de QA. Usar `get_urls_por_market(ambiente)`.
+- Combo en GUI: sección "Flujo", entre País y Tipo de viaje.
+
 ## 4) Flujo funcional
 
 Home -> búsqueda -> selección vuelo/tarifa -> extras -> pasajeros -> checkout -> pago -> cierre.

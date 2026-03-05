@@ -15,6 +15,8 @@ from config.pago import (
     HOME_MARKET,
     AMBIENTE,
     AMBIENTES_DISPONIBLES,
+    # URLS_POR_MARKET es un snapshot de QA (ambiente por defecto).
+    # Para obtener URLs de otro ambiente usa get_urls_por_market(ambiente).
     URLS_POR_MARKET,
     MEDIO_PAGO_POR_MARKET,
     TARJETA_POR_MARKET,

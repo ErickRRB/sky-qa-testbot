@@ -55,10 +55,27 @@ Guía práctica: “si me piden X, toco Y”.
 - Constante de referencia en `config/vuelo.py` (`MIN_DIAS_A_FUTURO`).
 - Documentación en `README.md` y `CASOS_DE_PRUEBA.md`.
 
-## 9. Verificación rápida recomendada
+## 9. Me piden agregar o modificar un ambiente (QA/TSTS/Stage/otro)
+
+1. `config/pago.py`: agregar entrada en `AMBIENTES_DISPONIBLES` con el subdominio exacto.
+2. `gui.py`: agregar label en `AMBIENTE_LABEL_TO_CODE` (constante al inicio del archivo).
+3. No tocar `URLS_POR_MARKET` directamente — se genera desde `get_urls_por_market()`.
+4. `AGENTS.md` + este playbook: actualizar si el ambiente tiene comportamiento especial.
+
+> **No tocar** `test_sky.py` — el ambiente solo afecta la URL base, la navegación es igual.
+
+## 10. Me piden agregar un nuevo market (país)
+
+1. `config/pago.py`: `_URLS_BASE`, `MEDIO_PAGO_POR_MARKET`, `TARJETA_POR_MARKET`.
+2. `cli.py`: `MARKETS_VALIDOS`.
+3. `gui.py`: `MARKET_LABEL_TO_CODE`.
+4. `test_sky.py`: flujo de pago específico del market (estructura de formulario varía por gateway).
+5. `README.md` y `CASOS_DE_PRUEBA.md`.
+
+## 11. Verificación rápida recomendada
 
 ```bash
-python3 -m py_compile test_sky.py cli.py gui.py
-venv/bin/python -u test_sky.py --market PE --tipo-viaje ONE_WAY --checkpoint BUSQUEDA
-venv/bin/python -u test_sky.py --market PE --tipo-viaje ONE_WAY --checkpoint CHECKOUT
+make check
+make smoke-busqueda
+make smoke-checkout
 ```

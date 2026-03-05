@@ -128,7 +128,7 @@ DEFAULT_PRESETS = {
 class SkyBotGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Sky QA TestBot - Interfaz Visual")
+        self.root.title("Sky TestBot - Interfaz Visual")
         self.root.geometry("1180x860")
         self.root.minsize(980, 700)
 

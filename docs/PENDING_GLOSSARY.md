@@ -6,15 +6,6 @@ Backlog de limpieza técnica y glosario corto para reducir ambigüedad entre age
 
 ## P0 (alta prioridad — mayor impacto en eficiencia de agentes IA)
 
-- **Dividir `test_sky.py` (~1900 líneas) en módulos**:
-  - `core/search_flow.py` — búsqueda, tipo viaje, fechas, pasajeros
-  - `core/passenger_flow.py` — datos de pasajero, avance a checkout
-  - `core/payment_flows.py` — `_pagar_*` + `PAYMENT_DISPATCH`
-  - `core/selectors.py` — constantes de selectores CSS/texto
-  - `core/browser_session.py` — CDP, sesión, contexto Playwright
-  - **Por qué es P0**: un agente hoy lee ~1900 líneas por tarea. Con módulos lee ~200. Mayor ROI de tokens del proyecto.
-  - Riesgo: refactor grande — validar todos los smokes post-split.
-
 - **Centralizar selectores CSS/texto en `core/selectors.py`**:
   - Hoy están inline dispersos. Cuando cambia el frontend de SKY, un agente hace grep de todo el archivo.
   - Con archivo central: el cambio es una línea.
@@ -35,7 +26,11 @@ Backlog de limpieza técnica y glosario corto para reducir ambigüedad entre age
 
 ## ✅ Completado (referencia)
 
-- `PAYMENT_DISPATCH` dict en `test_sky.py` — reemplaza if/elif. Para agregar market: 1 línea en el dict.
+- **Split de `test_sky.py`** — módulos `core/` creados:
+  - `core/state.py`, `core/helpers.py`, `core/browser_session.py`
+  - `core/search_flow.py`, `core/passenger_flow.py`, `core/payment_flows.py`
+  - `test_sky.py` reducido a ~170 líneas (orquestador puro).
+- `PAYMENT_DISPATCH` dict en `core/payment_flows.py` — reemplaza if/elif. Para agregar market: 1 línea en el dict.
 - `validate-ambientes`, `smoke-tsts`, `smoke-stage` en `Makefile`.
 - Schema de `CFG` documentado en docstring de `cli.py::aplicar_args()`.
 - `make check` valida contrato CLI además de compilación.

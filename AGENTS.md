@@ -24,7 +24,7 @@ Después leer en orden:
 
 ## 2. Mapa rápido del código
 
-- `test_sky.py`: orquestador principal del flujo Playwright + helpers de interacción.
+- `test_sky.py`: orquestador lean (~170 líneas) — importa desde `core/`, ejecuta el flujo.
 - `cli.py`: contrato de flags CLI y resolución de configuración final (`CFG`).
 - `config/`: defaults de negocio (rutas, vuelo, pasajero, pagos, checkpoint).
 - `gui.py`: interfaz visual, presets, persistencia local, armado de comando CLI.
@@ -35,6 +35,17 @@ Después leer en orden:
 - `docs/AI_CONTEXT_PACK.md`: resumen ultra corto para ahorrar tokens.
 - `docs/REGRESSION_MATRIX.md`: batería mínima de regresión.
 - `docs/COMMIT_PROTOCOL.md`: estándar de commits y trazabilidad.
+
+### Módulos `core/`
+
+| Archivo | Responsabilidad |
+|---|---|
+| `core/state.py` | Estado global compartido (`CFG`, `EXPLORACION_RUN_ID`, `EXPLORACION_DIR`) |
+| `core/helpers.py` | Helpers genéricos de Playwright (clicks, fills, buscar visible, checkpoint, exploración UI) |
+| `core/browser_session.py` | Crear sesión CDP o local — devuelve `(browser, context, page, session_cdp)` |
+| `core/search_flow.py` | Búsqueda de vuelo: tipo viaje, ciudad, fechas, pasajeros, tarifa, extras |
+| `core/passenger_flow.py` | Formulario de pasajeros + avance a checkout |
+| `core/payment_flows.py` | Flujos de pago por market + `PAYMENT_DISPATCH` dict |
 
 ## 3. Flujo de configuración (fuente de verdad)
 
@@ -58,12 +69,12 @@ Regla clave:
 ## 5. Invariantes de estabilidad
 
 - No romper compatibilidad de flags existentes sin actualizar GUI + README.
-- No mover lógica de pago a `gui.py`; el flujo real vive en `test_sky.py`.
+- No mover lógica de pago a `gui.py`; el flujo real vive en `core/payment_flows.py`.
 - Si se agrega un **market**, actualizar:
   - `config/pago.py` (`_URLS_BASE`, `MEDIO_PAGO_POR_MARKET`, `TARJETA_POR_MARKET`)
   - `cli.py` (`MARKETS_VALIDOS`)
   - `gui.py` (`MARKET_LABEL_TO_CODE`)
-  - flujos de pago en `test_sky.py`
+  - `core/payment_flows.py` (nueva función `_pagar_<market>` + entrada en `PAYMENT_DISPATCH`)
   - opciones CLI y docs.
 - Si se agrega un **ambiente**, actualizar:
   - `config/pago.py` (`AMBIENTES_DISPONIBLES`)
@@ -76,7 +87,7 @@ Regla clave:
 
 1. Compilar Python:
 ```bash
-python3 -m py_compile test_sky.py cli.py gui.py
+python3 -m py_compile test_sky.py cli.py gui.py core/helpers.py core/browser_session.py core/search_flow.py core/passenger_flow.py core/payment_flows.py
 ```
 
 2. Verificar arranque GUI:

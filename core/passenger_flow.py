@@ -51,40 +51,6 @@ def _esperar_o_avanzar_hasta_pasajeros(page, timeout_ms=60000):
     )
 
 
-def _avanzar_a_checkout_desde_passenger(page, timeout_ms=60000):
-    deadline = time.monotonic() + timeout_ms / 1000
-
-    while time.monotonic() < deadline:
-        url_actual = page.url or ""
-        if "checkout" in url_actual:
-            return
-
-        if "passenger-detail" in url_actual:
-            _click_todos_selectores_visibles(
-                page,
-                [
-                    'button:has-text("Siguiente")',
-                    'button:has-text("Ir al pago")',
-                    'button:has-text("Continuar")',
-                    'button:has-text("Continue")',
-                ],
-                force=True,
-            )
-            page.wait_for_timeout(700)
-            _click_todos_selectores_visibles(
-                page,
-                [
-                    'button:has-text("Proceder al pago")',
-                    'button:has-text("Proceed to payment")',
-                    'button:has-text("Ir al pago")',
-                ],
-                force=True,
-            )
-
-        page.wait_for_timeout(1200)
-
-    raise RuntimeError(f"No se pudo avanzar de passenger-detail a checkout en {timeout_ms}ms. URL: {page.url}")
-
 
 def _avanzar_a_checkout(page, timeout_ms=60000):
     deadline = time.monotonic() + timeout_ms / 1000

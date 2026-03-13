@@ -9,6 +9,9 @@ from config.vuelo import (
     CANTIDAD_ADULTOS,
     CANTIDAD_NINOS,
     CANTIDAD_INFANTES,
+    SELECCION_ASIENTO,
+    MALETAS_CABINA,
+    MALETAS_BODEGA,
 )
 from config.pasajero import PASAJERO
 from config.pago import (
@@ -34,6 +37,9 @@ __all__ = [
     "CANTIDAD_ADULTOS",
     "CANTIDAD_NINOS",
     "CANTIDAD_INFANTES",
+    "SELECCION_ASIENTO",
+    "MALETAS_CABINA",
+    "MALETAS_BODEGA",
     "PASAJERO",
     "HOME_MARKET",
     "AMBIENTE",

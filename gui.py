@@ -22,7 +22,10 @@ from config import (
     ESPERA_FINAL_SEGUNDOS,
     HOME_MARKET,
     AMBIENTE,
+    MALETAS_BODEGA,
+    MALETAS_CABINA,
     PASAJERO,
+    SELECCION_ASIENTO,
     TARJETA_POR_MARKET,
     TIEMPO_PAUSA_SEGURIDAD,
     TIPO_VIAJE,
@@ -50,6 +53,11 @@ TRIP_LABEL_TO_CODE = {
     "Ida y vuelta": "ROUND_TRIP",
 }
 TRIP_CODE_TO_LABEL = {v: k for k, v in TRIP_LABEL_TO_CODE.items()}
+SEAT_STRATEGY_LABEL_TO_CODE = {
+    "Omitir selección": "SKIP",
+    "Elegir automático": "AUTO",
+}
+SEAT_STRATEGY_CODE_TO_LABEL = {v: k for k, v in SEAT_STRATEGY_LABEL_TO_CODE.items()}
 
 CHECKPOINT_LABEL_TO_CODE = {
     "Ninguno (flujo completo)": NO_CHECKPOINT,
@@ -162,6 +170,11 @@ class SkyBotGUI:
         self.ninos_var = tk.IntVar(value=0)
         self.infantes_var = tk.IntVar(value=0)
         self.checkpoint_var = tk.StringVar(value=checkpoint_default)
+        self.seleccion_asiento_var = tk.StringVar(
+            value=SEAT_STRATEGY_CODE_TO_LABEL.get(SELECCION_ASIENTO, "Omitir selección")
+        )
+        self.maletas_cabina_var = tk.IntVar(value=MALETAS_CABINA)
+        self.maletas_bodega_var = tk.IntVar(value=MALETAS_BODEGA)
 
         self.pausa_var = tk.IntVar(value=TIEMPO_PAUSA_SEGURIDAD)
         self.slow_mo_var = tk.IntVar(value=VELOCIDAD_VISUAL)
@@ -247,6 +260,9 @@ class SkyBotGUI:
             "ninos": int(self.ninos_var.get()),
             "infantes": int(self.infantes_var.get()),
             "checkpoint": self.checkpoint_var.get(),
+            "seleccion_asiento": self.seleccion_asiento_var.get(),
+            "maletas_cabina": int(self.maletas_cabina_var.get()),
+            "maletas_bodega": int(self.maletas_bodega_var.get()),
             "pausa": int(self.pausa_var.get()),
             "slow_mo": int(self.slow_mo_var.get()),
             "espera_final": int(self.espera_final_var.get()),
@@ -291,6 +307,9 @@ class SkyBotGUI:
             self.ninos_var,
             self.infantes_var,
             self.checkpoint_var,
+            self.seleccion_asiento_var,
+            self.maletas_cabina_var,
+            self.maletas_bodega_var,
             self.pausa_var,
             self.slow_mo_var,
             self.espera_final_var,
@@ -513,6 +532,15 @@ class SkyBotGUI:
         self._add_spin(viaje, "Adultos", self.adultos_var, 1, 9, row=4)
         self._add_spin(viaje, "Niños", self.ninos_var, 0, 9, row=5)
         self._add_spin(viaje, "Infantes", self.infantes_var, 0, 9, row=6)
+        self._add_combo(
+            viaje,
+            "Asiento",
+            self.seleccion_asiento_var,
+            list(SEAT_STRATEGY_LABEL_TO_CODE.keys()),
+            row=7,
+        )
+        self._add_spin(viaje, "Maletas cabina", self.maletas_cabina_var, 0, 9, row=8)
+        self._add_spin(viaje, "Maletas bodega", self.maletas_bodega_var, 0, 9, row=9)
 
         opcional_section = self._crear_seccion_desplegable(
             sections_root,
@@ -964,6 +992,18 @@ class SkyBotGUI:
             return value
         return TRIP_CODE_TO_LABEL.get(value, "Solo ida")
 
+    def _seat_strategy_code_from_label(self, value):
+        if value in SEAT_STRATEGY_LABEL_TO_CODE:
+            return SEAT_STRATEGY_LABEL_TO_CODE[value]
+        if value in SEAT_STRATEGY_CODE_TO_LABEL:
+            return value
+        return SELECCION_ASIENTO
+
+    def _seat_strategy_label_from_value(self, value):
+        if value in SEAT_STRATEGY_LABEL_TO_CODE:
+            return value
+        return SEAT_STRATEGY_CODE_TO_LABEL.get(value, "Omitir selección")
+
     def _checkpoint_code_from_label(self, value):
         if value in CHECKPOINT_LABEL_TO_CODE:
             return CHECKPOINT_LABEL_TO_CODE[value]
@@ -991,6 +1031,9 @@ class SkyBotGUI:
             "ninos": int(self.ninos_var.get()),
             "infantes": int(self.infantes_var.get()),
             "checkpoint": self.checkpoint_var.get(),
+            "seleccion_asiento": self.seleccion_asiento_var.get(),
+            "maletas_cabina": int(self.maletas_cabina_var.get()),
+            "maletas_bodega": int(self.maletas_bodega_var.get()),
             "pausa": int(self.pausa_var.get()),
             "slow_mo": int(self.slow_mo_var.get()),
             "espera_final": int(self.espera_final_var.get()),
@@ -1050,6 +1093,9 @@ class SkyBotGUI:
         _set_int(self.ninos_var, "ninos")
         _set_int(self.infantes_var, "infantes")
         _set_str(self.checkpoint_var, "checkpoint")
+        _set_str(self.seleccion_asiento_var, "seleccion_asiento")
+        _set_int(self.maletas_cabina_var, "maletas_cabina")
+        _set_int(self.maletas_bodega_var, "maletas_bodega")
         _set_int(self.pausa_var, "pausa")
         _set_int(self.slow_mo_var, "slow_mo")
         _set_int(self.espera_final_var, "espera_final")
@@ -1080,6 +1126,7 @@ class SkyBotGUI:
         self.ambiente_var.set(self._ambiente_label_from_value(self.ambiente_var.get()))
         self.tipo_viaje_var.set(self._trip_label_from_value(self.tipo_viaje_var.get()))
         self.checkpoint_var.set(self._checkpoint_label_from_value(self.checkpoint_var.get()))
+        self.seleccion_asiento_var.set(self._seat_strategy_label_from_value(self.seleccion_asiento_var.get()))
         if self.genero_override_var.get() not in {"", "Masculino", "Femenino"}:
             self.genero_override_var.set("")
         self.cdp_url_var.set(self._normalizar_cdp_url(self.cdp_url_var.get()))
@@ -1134,6 +1181,9 @@ class SkyBotGUI:
             self.ninos_var.set(0)
             self.infantes_var.set(0)
             self.checkpoint_var.set("Ninguno (flujo completo)")
+            self.seleccion_asiento_var.set(SEAT_STRATEGY_CODE_TO_LABEL.get(SELECCION_ASIENTO, "Omitir selección"))
+            self.maletas_cabina_var.set(MALETAS_CABINA)
+            self.maletas_bodega_var.set(MALETAS_BODEGA)
             self.pausa_var.set(TIEMPO_PAUSA_SEGURIDAD)
             self.slow_mo_var.set(VELOCIDAD_VISUAL)
             self.espera_final_var.set(ESPERA_FINAL_SEGUNDOS)
@@ -1172,12 +1222,14 @@ class SkyBotGUI:
             pausa = int(self.pausa_var.get())
             slow_mo = int(self.slow_mo_var.get())
             espera_final = int(self.espera_final_var.get())
+            maletas_cabina = int(self.maletas_cabina_var.get())
+            maletas_bodega = int(self.maletas_bodega_var.get())
         except Exception as error:
             raise ValueError(f"Hay un valor numérico inválido: {error}")
 
         if adultos <= 0:
             raise ValueError("Adultos debe ser mayor a 0.")
-        if min(ninos, infantes, dias, dias_retorno, pausa, slow_mo, espera_final) < 0:
+        if min(ninos, infantes, dias, dias_retorno, pausa, slow_mo, espera_final, maletas_cabina, maletas_bodega) < 0:
             raise ValueError("No se permiten valores negativos.")
         if infantes > adultos:
             raise ValueError("Infantes no puede ser mayor que adultos.")
@@ -1190,6 +1242,8 @@ class SkyBotGUI:
             "pausa": pausa,
             "slow_mo": slow_mo,
             "espera_final": espera_final,
+            "maletas_cabina": maletas_cabina,
+            "maletas_bodega": maletas_bodega,
         }
 
     def _cdp_disponible(self, cdp_url):
@@ -1303,6 +1357,7 @@ class SkyBotGUI:
         market_code = self._market_code_from_label(self.market_var.get())
         tipo_viaje_code = self._trip_code_from_label(self.tipo_viaje_var.get())
         checkpoint_code = self._checkpoint_code_from_label(self.checkpoint_var.get())
+        seleccion_asiento_code = self._seat_strategy_code_from_label(self.seleccion_asiento_var.get())
 
         ambiente_code = self._ambiente_code_from_label(self.ambiente_var.get())
         cmd = [PYTHON_EXEC, "-u", str(PROJECT_ROOT / "test_sky.py")]
@@ -1320,6 +1375,9 @@ class SkyBotGUI:
         cmd.extend(["--adultos", str(numeros["adultos"])])
         cmd.extend(["--ninos", str(numeros["ninos"])])
         cmd.extend(["--infantes", str(numeros["infantes"])])
+        cmd.extend(["--seleccion-asiento", seleccion_asiento_code])
+        cmd.extend(["--maletas-cabina", str(numeros["maletas_cabina"])])
+        cmd.extend(["--maletas-bodega", str(numeros["maletas_bodega"])])
         cmd.extend(["--pausa", str(numeros["pausa"])])
         cmd.extend(["--slow-mo", str(numeros["slow_mo"])])
         cmd.extend(["--espera-final-segundos", str(numeros["espera_final"])])

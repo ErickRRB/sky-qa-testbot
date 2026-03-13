@@ -20,3 +20,9 @@ DIAS_RETORNO_DESDE_IDA = 4
 CANTIDAD_ADULTOS = 1
 CANTIDAD_NINOS = 0
 CANTIDAD_INFANTES = 0
+
+# Extras opcionales
+# Asientos: "SKIP" (omitir selección) o "AUTO" (intentar elegir uno disponible)
+SELECCION_ASIENTO = "SKIP"
+MALETAS_CABINA = 0
+MALETAS_BODEGA = 0

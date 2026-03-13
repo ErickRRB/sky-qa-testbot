@@ -607,7 +607,7 @@ def _seleccionar_vuelo_y_tarifa(page, tramo):
             boton_vuelo.scroll_into_view_if_needed()
             page.wait_for_timeout(300)
             boton_vuelo.click(force=True)
-            page.wait_for_selector('[data-test^="is-itinerary-selectRate"]', timeout=5000)
+            page.wait_for_selector('[data-test^="is-itinerary-selectRate"]', timeout=10000)
             seleccionado = True
             break
         except Exception as error:
@@ -637,8 +637,304 @@ def _seleccionar_vuelo_y_tarifa(page, tramo):
         pass
 
 
+def _url_contiene(page, fragmento):
+    return fragmento in ((page.url or "").lower())
+
+
+def _esperar_cambio_post_accion(page, url_previa, timeout_ms=12000):
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        if (page.url or "") != url_previa:
+            return True
+        if _buscar_selector_visible(
+            page,
+            [
+                'button:has-text("Seguir sin elegir")',
+                'button:has-text("Elegir asiento ahora")',
+                'button:has-text("Continue without selecting")',
+                'button:has-text("Choose seat now")',
+                'button:has-text("Finalizar")',
+                'button:has-text("Continuar")',
+            ],
+        ):
+            return True
+        page.wait_for_timeout(200)
+    return False
+
+
+def _click_primer_selector(page, selectores, timeout=2500):
+    for selector in selectores:
+        locator = page.locator(selector)
+        try:
+            if locator.count() == 0:
+                continue
+        except Exception:
+            continue
+
+        for indice in range(locator.count()):
+            item = locator.nth(indice)
+            try:
+                item.scroll_into_view_if_needed()
+            except Exception:
+                pass
+            try:
+                item.click(force=True, timeout=timeout)
+                return True
+            except Exception:
+                continue
+    return False
+
+
+def _continuar_modal_asientos_sin_elegir(page):
+    return _click_selector_visible(
+        page,
+        [
+            'button:has-text("Seguir sin elegir")',
+            'button:has-text("Continuar sin elegir")',
+            'button:has-text("Continue without selecting")',
+            'button:has-text("Continue without seat selection")',
+            'button:has-text("Continuar sin seleccionar asiento")',
+        ],
+        force=True,
+        requerido=False,
+    )
+
+
+def _seleccionar_primer_asiento_disponible(page):
+    selectores = [
+        '[data-test*="seat"] button:not([disabled])',
+        '[data-testid*="seat"] button:not([disabled])',
+        'button[class*="seat"]:not([disabled])',
+        '[class*="seat-map"] button:not([disabled])',
+        '[class*="seat"] [role="button"]',
+        'svg [class*="seat"][class*="available"]',
+        'svg [class*="available"]',
+    ]
+
+    for selector in selectores:
+        locator = page.locator(selector)
+        for indice in range(locator.count()):
+            item = locator.nth(indice)
+            try:
+                if not item.is_visible():
+                    continue
+                item.scroll_into_view_if_needed()
+                item.click(force=True, timeout=2500)
+                page.wait_for_timeout(500)
+                return True
+            except Exception:
+                continue
+
+    return False
+
+
+def _resolver_pantalla_asientos(page):
+    estrategia = state.CFG.get("extras", {}).get("seleccion_asiento", "SKIP")
+    url_previa = page.url or ""
+
+    if estrategia == "AUTO":
+        if _seleccionar_primer_asiento_disponible(page):
+            print("🪑 Asiento seleccionado automáticamente.")
+        else:
+            print("⚠️ No se encontró asiento disponible con selectores conocidos. Se continuará sin elegir.")
+
+    if _click_selector_visible(
+        page,
+        [
+            'button:has-text("Continuar al siguiente vuelo")',
+            'button:has-text("Continuar ao próximo voo")',
+            'button:has-text("Continue to next flight")',
+            'button:has-text("Quiero un asiento aleatorio")',
+            'button:has-text("I want a random seat")',
+            'button:has-text("Continuar")',
+            'button:has-text("Continue")',
+        ],
+        force=True,
+        requerido=False,
+    ) or _click_primer_selector(
+        page,
+        [
+            'button:has-text("Continuar al siguiente vuelo")',
+            'button:has-text("Continuar ao próximo voo")',
+            'button:has-text("Continue to next flight")',
+            'button:has-text("Quiero un asiento aleatorio")',
+            'button:has-text("I want a random seat")',
+            'button:has-text("Continuar")',
+            'button:has-text("Continue")',
+        ],
+    ):
+        page.wait_for_timeout(600)
+        _continuar_modal_asientos_sin_elegir(page)
+        _esperar_cambio_post_accion(page, url_previa)
+        return True
+
+    if _continuar_modal_asientos_sin_elegir(page) or _click_primer_selector(
+        page,
+        [
+            'button:has-text("Seguir sin elegir")',
+            'button:has-text("Continuar sin elegir")',
+            'button:has-text("Continue without selecting")',
+        ],
+    ):
+        _esperar_cambio_post_accion(page, url_previa)
+        return True
+
+    return False
+
+
+def _contar_unidades_servicio(page):
+    patron = re.compile(r"^\d+$")
+    candidatos = page.locator("div, span, p")
+    for indice in range(candidatos.count()):
+        item = candidatos.nth(indice)
+        try:
+            if not item.is_visible():
+                continue
+            texto = _normalizar_texto(item.inner_text())
+            if patron.match(texto):
+                return int(texto)
+        except Exception:
+            continue
+    return 0
+
+
+def _ajustar_cantidad_servicio_lateral(page, cantidad_objetivo):
+    if cantidad_objetivo <= 0:
+        return True
+
+    boton_sumar = None
+    deadline = time.monotonic() + 5
+
+    while time.monotonic() < deadline and boton_sumar is None:
+        botones = page.locator("button.sky-select-number_button")
+        for indice in range(botones.count()):
+            boton = botones.nth(indice)
+            try:
+                if boton.is_visible() and boton.is_enabled():
+                    boton_sumar = boton
+            except Exception:
+                continue
+        if boton_sumar is None:
+            page.wait_for_timeout(200)
+
+    if not boton_sumar:
+        return False
+
+    for _ in range(cantidad_objetivo):
+        boton_sumar.click(force=True)
+        page.wait_for_timeout(250)
+    return True
+
+
+def _seleccionar_servicio_adicional(page, etiquetas, cantidad_objetivo):
+    if cantidad_objetivo <= 0:
+        return False
+
+    direct_selectores = []
+    for etiqueta in etiquetas:
+        direct_selectores.extend(
+            [
+                f'section:has-text("{etiqueta}") button:has-text("Agregar")',
+                f'article:has-text("{etiqueta}") button:has-text("Agregar")',
+                f'div:has-text("{etiqueta}") button:has-text("Agregar")',
+            ]
+        )
+
+    if not _click_selector_visible(page, direct_selectores, force=True, requerido=False):
+        patron = re.compile("|".join(re.escape(etiqueta) for etiqueta in etiquetas), re.IGNORECASE)
+        tarjetas = page.locator("section, article, div").filter(has_text=patron)
+
+        for indice in range(tarjetas.count()):
+            tarjeta = tarjetas.nth(indice)
+            try:
+                if not tarjeta.is_visible():
+                    continue
+                boton_agregar = _buscar_visible(
+                    tarjeta.locator('button:has-text("Agregar"), button:has-text("Add"), button:has-text("Adicionar")')
+                )
+                if not boton_agregar:
+                    continue
+                boton_agregar.scroll_into_view_if_needed()
+                boton_agregar.click(force=True)
+                break
+            except Exception:
+                continue
+        else:
+            return False
+
+    page.wait_for_timeout(600)
+
+    if _ajustar_cantidad_servicio_lateral(page, cantidad_objetivo):
+        _click_selector_visible(
+            page,
+            [
+                'button:has-text("Finalizar")',
+                'button:has-text("Guardar y continuar")',
+                'button:has-text("Done")',
+            ],
+            force=True,
+            requerido=False,
+        )
+        page.wait_for_timeout(800)
+        return True
+
+    return False
+
+
+def _resolver_pantalla_ancillaries(page):
+    extras = state.CFG.get("extras", {})
+    maletas_cabina = extras.get("maletas_cabina", 0)
+    maletas_bodega = extras.get("maletas_bodega", 0)
+
+    if maletas_cabina > 0 and not _seleccionar_servicio_adicional(
+        page,
+        ["Equipaje en cabina", "Cabin bag", "Cabin baggage"],
+        maletas_cabina,
+    ):
+        print(f"⚠️ No se pudo agregar equipaje de cabina solicitado ({maletas_cabina}).")
+
+    if maletas_bodega > 0 and not _seleccionar_servicio_adicional(
+        page,
+        ["Equipaje en bodega", "Checked baggage", "Equipaje facturado"],
+        maletas_bodega,
+    ):
+        print(f"⚠️ No se pudo agregar equipaje en bodega solicitado ({maletas_bodega}).")
+
+    if _click_selector_visible(
+        page,
+        [
+            'button:has-text("Continuar")',
+            'button:has-text("Guardar y continuar")',
+            'button:has-text("Continue")',
+        ],
+        force=True,
+        requerido=False,
+    ) or _click_primer_selector(
+        page,
+        [
+            'button:has-text("Continuar")',
+            'button:has-text("Guardar y continuar")',
+            'button:has-text("Continue")',
+        ],
+    ):
+        page.wait_for_timeout(900)
+        return True
+
+    return False
+
+
 def _saltar_extras(page):
     print("--- Saltando Extras ---")
+    if _url_contiene(page, "/seats"):
+        if not _resolver_pantalla_asientos(page):
+            print("⚠️ Pantalla de asientos aún no lista para avanzar. Reintentando...")
+        return
+
+    if _url_contiene(page, "/additional-services"):
+        if not _resolver_pantalla_ancillaries(page):
+            print("⚠️ Pantalla de servicios adicionales aún no lista para avanzar. Reintentando...")
+        return
+
     botones = [
         [
             'button:has-text("Continuar al siguiente vuelo")',

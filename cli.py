@@ -8,6 +8,7 @@ CHECKPOINTS_VALIDOS = ["BUSQUEDA", "SELECCION_TARIFA", "DATOS_PASAJERO", "CHECKO
 MARKETS_VALIDOS = list(_MEDIO_PAGO.keys())
 TIPOS_VIAJE_VALIDOS = ["ONE_WAY", "ROUND_TRIP"]
 AMBIENTES_VALIDOS = list(AMBIENTES_DISPONIBLES.keys())
+SELECCION_ASIENTO_VALIDA = ["SKIP", "AUTO"]
 
 
 def _int_positivo(value):
@@ -62,6 +63,15 @@ def _normalizar_tipo_viaje(tipo_viaje):
     if valor in {"RT", "ROUNDTRIP", "ROUND_TRIP", "IDA_Y_VUELTA"}:
         return "ROUND_TRIP"
     return valor
+
+
+def _normalizar_seleccion_asiento(valor):
+    normalizado = (valor or "").strip().upper()
+    if normalizado in {"SKIP", "OMITIR", "NONE", "SIN_ASIENTO"}:
+        return "SKIP"
+    if normalizado in {"AUTO", "AUTOMATICO", "AUTOMÁTICO", "FIRST", "PRIMERO"}:
+        return "AUTO"
+    return normalizado
 
 
 def _generar_pasajeros(base, adultos, ninos, infantes):
@@ -213,6 +223,24 @@ Ejemplos:
         metavar="N",
         help="Cantidad de pasajeros infantes",
     )
+    grupo_vuelo.add_argument(
+        "--seleccion-asiento",
+        type=_normalizar_seleccion_asiento,
+        choices=SELECCION_ASIENTO_VALIDA,
+        help="Estrategia para asientos: SKIP o AUTO",
+    )
+    grupo_vuelo.add_argument(
+        "--maletas-cabina",
+        type=_int_no_negativo,
+        metavar="N",
+        help="Cantidad total de maletas/equipaje de cabina adicional a intentar agregar",
+    )
+    grupo_vuelo.add_argument(
+        "--maletas-bodega",
+        type=_int_no_negativo,
+        metavar="N",
+        help="Cantidad total de maletas/equipaje en bodega a intentar agregar",
+    )
 
     # --- 3. Datos del Pasajero ---
     grupo_pax = parser.add_argument_group("Datos del Pasajero")
@@ -274,6 +302,7 @@ def aplicar_args(args):
         dias_retorno    int
         pasajeros       dict  {adultos, ninos, infantes}
         pasajeros_lista list[dict]  lista completa de pasajeros
+        extras          dict  {seleccion_asiento, maletas_cabina, maletas_bodega}
         checkpoint      str|None
         pasajero        dict  primer pasajero (alias de pasajeros_lista[0])
         tarjeta         dict  {numero, fecha, cvv, ...campos extra por market}
@@ -291,6 +320,9 @@ def aplicar_args(args):
         CANTIDAD_ADULTOS,
         CANTIDAD_NINOS,
         CANTIDAD_INFANTES,
+        SELECCION_ASIENTO,
+        MALETAS_CABINA,
+        MALETAS_BODEGA,
         PASAJERO,
         HOME_MARKET,
         AMBIENTE,
@@ -322,6 +354,9 @@ def aplicar_args(args):
         raise ValueError("La cantidad de infantes no puede ser mayor a la cantidad de adultos.")
 
     dias_retorno = args.dias_retorno if args.dias_retorno is not None else DIAS_RETORNO_DESDE_IDA
+    seleccion_asiento = _normalizar_seleccion_asiento(args.seleccion_asiento or SELECCION_ASIENTO)
+    maletas_cabina = args.maletas_cabina if args.maletas_cabina is not None else MALETAS_CABINA
+    maletas_bodega = args.maletas_bodega if args.maletas_bodega is not None else MALETAS_BODEGA
     pasajero_base = {
         "nombre": args.nombre or PASAJERO["nombre"],
         "apellido": args.apellido or PASAJERO["apellido"],
@@ -363,6 +398,11 @@ def aplicar_args(args):
             "infantes": infantes,
         },
         "pasajeros_lista": pasajeros_lista,
+        "extras": {
+            "seleccion_asiento": seleccion_asiento,
+            "maletas_cabina": maletas_cabina,
+            "maletas_bodega": maletas_bodega,
+        },
         "checkpoint": args.checkpoint or CHECKPOINT,
         "pasajero": pasajeros_lista[0],
         "tarjeta": {

@@ -12,6 +12,17 @@ Formato recomendado por entrada:
 ## [Unreleased]
 
 ### Added
+- `docs/BOT_FRICTIONS.md`: registro separado de parches, inconsistencias y mejoras sugeridas de causa raíz detectadas en ejecuciones reales del bot.
+
+### Changed
+- Soporte inicial de parámetros para extras:
+  - `--seleccion-asiento SKIP|AUTO`
+  - `--maletas-cabina`
+  - `--maletas-bodega`
+- GUI y presets actualizados para persistir estrategia de asiento y maletas.
+- Navegación post-tarifa endurecida para variantes visuales nuevas en `seats` y `additional-services` de QA/Stage.
+
+### Added
 - Documentación AI-first:
   - `AGENTS.md`
   - `docs/START_HERE.md`

@@ -172,10 +172,7 @@ def _pagar_niubiz(page):
     try:
         _seleccionar_medio_pago(page, "Niubiz")
     except Exception as e:
-        print(f"⚠️ Niubiz no apareció en 45s: {e}")
-        print("🖱️ Activando modo manual - continúa tú desde aquí")
-        _activar_modo_manual(page)
-        return
+        raise RuntimeError(f"Niubiz no apareció en checkout: {e}") from e
 
     print("Esperando animación del formulario...")
     page.wait_for_timeout(5000)
@@ -184,8 +181,7 @@ def _pagar_niubiz(page):
 
     input_tarjeta = _buscar_campo_tarjeta(page)
     if not input_tarjeta:
-        print("❌ Error: Nunca apareció el campo 'Número de Tarjeta'.")
-        return
+        raise RuntimeError("Nunca apareció el campo 'Número de Tarjeta'.")
 
     print("✅ Campo tarjeta detectado. Validando habilitación...")
     try:
@@ -325,8 +321,7 @@ def _pagar_mercadopago(page):
             card_input.click()
             card_input.type(state.CFG["tarjeta"]["numero"], delay=50)
         else:
-            print("❌ No se encontró iframe de cardNumber")
-            return
+            raise RuntimeError("No se encontró iframe de cardNumber")
 
         page.wait_for_timeout(1000)
 
@@ -348,8 +343,7 @@ def _pagar_mercadopago(page):
             exp_input.click()
             exp_input.type(state.CFG["tarjeta"]["fecha"], delay=50)  # MM/YY
         else:
-            print("❌ No se encontró iframe de expirationDate")
-            return
+            raise RuntimeError("No se encontró iframe de expirationDate")
 
         page.wait_for_timeout(500)
 
@@ -419,8 +413,7 @@ def _pagar_cielo(page):
 
     input_tarjeta = _buscar_campo_tarjeta(page)
     if not input_tarjeta:
-        print("❌ Error: Nunca apareció el campo tarjeta para Cielo.")
-        return
+        raise RuntimeError("Nunca apareció el campo tarjeta para Cielo.")
 
     try:
         input_tarjeta.wait_for(state="visible", timeout=30000)

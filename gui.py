@@ -65,6 +65,8 @@ CHECKPOINT_LABEL_TO_CODE = {
     "Ninguno (flujo completo)": NO_CHECKPOINT,
     "Pausar después de búsqueda": "BUSQUEDA",
     "Pausar después de selección de tarifa": "SELECCION_TARIFA",
+    "Pausar al llegar a ancillaries": "ANCILLARIES",
+    "Pausar al llegar a datos del pasajero": "LLEGADA_DATOS_PASAJERO",
     "Pausar después de datos del pasajero": "DATOS_PASAJERO",
     "Pausar en checkout": "CHECKOUT",
     "Pausar en pago": "PAGO",
@@ -686,7 +688,7 @@ class SkyBotGUI:
         self.stop_button.pack(side=tk.RIGHT, padx=(8, 0))
         self.pause_button = ttk.Button(
             self.acciones_frame,
-            text="Pausar para edición",
+            text="⏸ Pausar para edición",
             command=self._pausar_para_edicion,
             state=tk.DISABLED,
         )

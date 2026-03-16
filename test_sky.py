@@ -14,6 +14,7 @@ from core.helpers import (
     _activar_modo_manual,
     detectar_etapa_actual,
     etapa_en_o_despues,
+    esperar_correccion_runtime,
     gestionar_pausa_edicion,
     _buscar_selector_visible,
     pausar_en_checkpoint,
@@ -101,106 +102,116 @@ def run(playwright: Playwright) -> None:
             if pausar_en_checkpoint(page, "BUSQUEDA"):
                 return
 
-            # -------------------------------------------
-            # 2. SELECCIÓN DE TARIFA
-            # -------------------------------------------
-            etapa_actual = detectar_etapa_actual(page)
-            debe_intentar_seleccion_vuelo = (
-                etapa_actual == "DESCONOCIDA"
-                or _buscar_selector_visible(
-                    page,
-                    ['button:has-text("Elegir vuelo")', '[data-test^="is-itinerary-selectFlight"]'],
-                )
-            )
+            while True:
+                try:
+                    # -------------------------------------------
+                    # 2. SELECCIÓN DE TARIFA
+                    # -------------------------------------------
+                    etapa_actual = detectar_etapa_actual(page)
+                    debe_intentar_seleccion_vuelo = (
+                        etapa_actual == "DESCONOCIDA"
+                        or _buscar_selector_visible(
+                            page,
+                            ['button:has-text("Elegir vuelo")', '[data-test^="is-itinerary-selectFlight"]'],
+                        )
+                    )
 
-            if not etapa_en_o_despues(etapa_actual, "DATOS_PASAJERO"):
-                if debe_intentar_seleccion_vuelo:
-                    _seleccionar_vuelo_y_tarifa(page, "IDA")
-                    if state.CFG["tipo_viaje"] == "ROUND_TRIP":
-                        _seleccionar_vuelo_y_tarifa(page, "VUELTA")
-                        _capturar_estado_ui(page, "vuelo_vuelta_seleccionado")
+                    if not etapa_en_o_despues(etapa_actual, "DATOS_PASAJERO"):
+                        if debe_intentar_seleccion_vuelo:
+                            _seleccionar_vuelo_y_tarifa(page, "IDA")
+                            if state.CFG["tipo_viaje"] == "ROUND_TRIP":
+                                _seleccionar_vuelo_y_tarifa(page, "VUELTA")
+                                _capturar_estado_ui(page, "vuelo_vuelta_seleccionado")
+                            else:
+                                _capturar_estado_ui(page, "vuelo_ida_seleccionado")
+                        elif etapa_actual != "DESCONOCIDA":
+                            print(f"ℹ️ Reanudando desde etapa detectada: {etapa_actual}")
+
+                        if not etapa_en_o_despues(detectar_etapa_actual(page), "DATOS_PASAJERO"):
+                            etapa_pre_extras = detectar_etapa_actual(page)
+                            if etapa_pre_extras == "SELECCION_TARIFA" and pausar_en_checkpoint(page, "ANCILLARIES"):
+                                return
+                            _saltar_extras(page)
+                            _capturar_estado_ui(page, "extras_saltados")
+                            gestionar_pausa_edicion(page, "extras_saltados")
                     else:
-                        _capturar_estado_ui(page, "vuelo_ida_seleccionado")
-                elif etapa_actual != "DESCONOCIDA":
-                    print(f"ℹ️ Reanudando desde etapa detectada: {etapa_actual}")
+                        print(f"ℹ️ Se omite selección de tarifa/extras; etapa detectada: {etapa_actual}")
 
-                if not etapa_en_o_despues(detectar_etapa_actual(page), "DATOS_PASAJERO"):
-                    _saltar_extras(page)
-                    _capturar_estado_ui(page, "extras_saltados")
-                    gestionar_pausa_edicion(page, "extras_saltados")
-            else:
-                print(f"ℹ️ Se omite selección de tarifa/extras; etapa detectada: {etapa_actual}")
+                    # 🛑 Checkpoint: Después de selección de tarifa
+                    if pausar_en_checkpoint(page, "SELECCION_TARIFA"):
+                        return
 
-            # 🛑 Checkpoint: Después de selección de tarifa
-            if pausar_en_checkpoint(page, "SELECCION_TARIFA"):
-                return
+                    # -------------------------------------------
+                    # 3. DATOS DEL PASAJERO
+                    # -------------------------------------------
+                    etapa_actual = detectar_etapa_actual(page)
+                    if not etapa_en_o_despues(etapa_actual, "CHECKOUT"):
+                        _rellenar_todos_los_pasajeros(page)
+                        _capturar_estado_ui(page, "pasajeros_completados")
+                        gestionar_pausa_edicion(page, "pasajeros_completados")
+                    else:
+                        print(f"ℹ️ Se omite carga de pasajeros; etapa detectada: {etapa_actual}")
 
-            # -------------------------------------------
-            # 3. DATOS DEL PASAJERO
-            # -------------------------------------------
-            etapa_actual = detectar_etapa_actual(page)
-            if not etapa_en_o_despues(etapa_actual, "CHECKOUT"):
-                _rellenar_todos_los_pasajeros(page)
-                _capturar_estado_ui(page, "pasajeros_completados")
-                gestionar_pausa_edicion(page, "pasajeros_completados")
-            else:
-                print(f"ℹ️ Se omite carga de pasajeros; etapa detectada: {etapa_actual}")
+                    # 🛑 Checkpoint: Después de datos del pasajero
+                    if pausar_en_checkpoint(page, "DATOS_PASAJERO"):
+                        return
 
-            # 🛑 Checkpoint: Después de datos del pasajero
-            if pausar_en_checkpoint(page, "DATOS_PASAJERO"):
-                return
+                    etapa_actual = detectar_etapa_actual(page)
+                    if not etapa_en_o_despues(etapa_actual, "CHECKOUT") and not _avanzar_a_checkout(page, timeout_ms=90000):
+                        _capturar_estado_ui(page, "post_confirmacion")
+                        print("⚠️ No se pudo avanzar automáticamente a checkout.")
+                        esperar_correccion_runtime(page, "avance_checkout")
+                        continue
 
-            etapa_actual = detectar_etapa_actual(page)
-            if not etapa_en_o_despues(etapa_actual, "CHECKOUT") and not _avanzar_a_checkout(page, timeout_ms=90000):
-                _capturar_estado_ui(page, "post_confirmacion")
-                print("⚠️ No se pudo avanzar automáticamente a checkout.")
-                print("🖱️ Activando modo manual - continúa tú desde aquí")
-                _activar_modo_manual(page)
-                return
+                    _capturar_estado_ui(page, "post_confirmacion")
+                    gestionar_pausa_edicion(page, "post_confirmacion")
 
-            _capturar_estado_ui(page, "post_confirmacion")
-            gestionar_pausa_edicion(page, "post_confirmacion")
+                    # -------------------------------------------
+                    # 4. CHECKOUT Y PAGO
+                    # -------------------------------------------
+                    print("--- Llegada al Checkout ---")
+                    _capturar_estado_ui(page, "checkout")
+                    gestionar_pausa_edicion(page, "checkout")
 
-            # -------------------------------------------
-            # 4. CHECKOUT Y PAGO
-            # -------------------------------------------
-            print("--- Llegada al Checkout ---")
-            _capturar_estado_ui(page, "checkout")
-            gestionar_pausa_edicion(page, "checkout")
+                    try:
+                        expect(page).to_have_url(re.compile(".*checkout"), timeout=30000)
+                    except Exception as error:
+                        print(f"⚠️ No se pudo llegar al checkout en 30s: {error}")
+                        esperar_correccion_runtime(page, "checkout_no_detectado")
+                        continue
 
-            try:
-                expect(page).to_have_url(re.compile(".*checkout"), timeout=30000)
-            except Exception as error:
-                print(f"⚠️ No se pudo llegar al checkout en 30s: {error}")
-                print("🖱️ Activando modo manual - continúa tú desde aquí")
-                _activar_modo_manual(page)
-                return
+                    # 🛑 Checkpoint: En el checkout
+                    if pausar_en_checkpoint(page, "CHECKOUT"):
+                        return
 
-            # 🛑 Checkpoint: En el checkout
-            if pausar_en_checkpoint(page, "CHECKOUT"):
-                return
+                    medio = state.CFG["medio_pago"]
+                    market = state.CFG["market"]
+                    print(f"--- Iniciando Pago: {medio} ({market}) ---")
 
-            medio = state.CFG["medio_pago"]
-            market = state.CFG["market"]
-            print(f"--- Iniciando Pago: {medio} ({market}) ---")
+                    try:
+                        pagar_fn = PAYMENT_DISPATCH.get(market)
+                        if pagar_fn:
+                            pagar_fn(page)
+                        else:
+                            print(f"❌ Market '{market}' no tiene flujo de pago implementado.")
+                    except Exception as error:
+                        print(f"❌ Error en flujo de pago: {error}")
+                        screenshots_dir = "screenshots_pruebas"
+                        os.makedirs(screenshots_dir, exist_ok=True)
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        error_path = os.path.join(screenshots_dir, f"error_pago_{timestamp}.png")
+                        page.screenshot(path=error_path)
+                        print(f"📸 Screenshot de error guardado en: {error_path}")
+                        esperar_correccion_runtime(page, "error_pago")
+                        continue
 
-            try:
-                pagar_fn = PAYMENT_DISPATCH.get(market)
-                if pagar_fn:
-                    pagar_fn(page)
-                else:
-                    print(f"❌ Market '{market}' no tiene flujo de pago implementado.")
-            except Exception as error:
-                print(f"❌ Error en flujo de pago: {error}")
-                screenshots_dir = "screenshots_pruebas"
-                os.makedirs(screenshots_dir, exist_ok=True)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                error_path = os.path.join(screenshots_dir, f"error_pago_{timestamp}.png")
-                page.screenshot(path=error_path)
-                print(f"📸 Screenshot de error guardado en: {error_path}")
-                print("🖱️ Activando modo manual - continúa tú desde aquí")
-                _activar_modo_manual(page)
-                return
+                    break
+                except Exception as error:
+                    print(f"⚠️ Error recuperable detectado: {error}")
+                    etapa_reanudada = esperar_correccion_runtime(page, "error_recuperable")
+                    if state.CFG.get("headless") and etapa_reanudada == "DESCONOCIDA":
+                        raise
+                    continue
 
             # -------------------------------------------
             # 5. SCREENSHOT FINAL Y CIERRE

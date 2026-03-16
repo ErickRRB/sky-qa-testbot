@@ -19,6 +19,7 @@ from core.helpers import (
     _click_texto_visible,
     _click_ultimo_texto_visible,
     _guardar_html_debug,
+    pausar_en_checkpoint,
 )
 from core.search_flow import _saltar_extras, _seleccionar_opcion_dropdown
 
@@ -293,6 +294,9 @@ def _rellenar_todos_los_pasajeros(page):
 
     expect(page).to_have_url(re.compile(".*passenger-detail"), timeout=20000)
     page.wait_for_timeout(1500)
+
+    if pausar_en_checkpoint(page, "LLEGADA_DATOS_PASAJERO"):
+        return
 
     for indice, pasajero in enumerate(pasajeros, start=1):
         _rellenar_pasajero(page, pasajero, indice, total)

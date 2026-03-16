@@ -115,6 +115,39 @@ def gestionar_pausa_edicion(page, contexto=""):
         page.wait_for_timeout(250)
 
 
+def esperar_correccion_runtime(page, motivo=""):
+    etapa_actual = detectar_etapa_actual(page)
+    print(f"🛠️ Corrección en runtime activada ({motivo or 'sin motivo'}).")
+    print(f"🖱️ Etapa actual detectada: {etapa_actual}")
+
+    if state.CFG.get("control_dir"):
+        _remove_control_file("continue.request")
+        _write_control_file(
+            "paused.state",
+            f"stage={etapa_actual}\nurl={page.url}\ncontext=recovery:{motivo}\ntimestamp={datetime.now().isoformat()}\n",
+        )
+        print("▶️ Corrige lo necesario en el navegador y presiona 'Continuar' en la GUI.")
+        while True:
+            continue_request = _control_path("continue.request")
+            if continue_request and os.path.exists(continue_request):
+                _remove_control_file("continue.request")
+                _remove_control_file("paused.state")
+                etapa_reanudada = detectar_etapa_actual(page)
+                print(f"▶️ Reintentando desde etapa detectada: {etapa_reanudada}")
+                return etapa_reanudada
+            page.wait_for_timeout(250)
+
+    if state.CFG.get("headless"):
+        print("ℹ️ Headless activo: no se puede corregir manualmente en runtime.")
+        return etapa_actual
+
+    print("▶️ Corrige lo necesario en el navegador y presiona 'Resume' en el inspector.")
+    page.pause()
+    etapa_reanudada = detectar_etapa_actual(page)
+    print(f"▶️ Reintentando desde etapa detectada: {etapa_reanudada}")
+    return etapa_reanudada
+
+
 # ==========================================
 # CHECKPOINT Y MODO MANUAL
 # ==========================================
@@ -272,15 +305,40 @@ def _buscar_selector_visible(page, selectores):
     return None
 
 
+def _error_transitorio_locator(error):
+    texto = str(error).lower()
+    return any(
+        patron in texto
+        for patron in (
+            "not attached to the dom",
+            "element is not attached",
+            "element handle is detached",
+            "stale",
+        )
+    )
+
+
 def _click_selector_visible(page, selectores, force=False, descripcion=None, requerido=False):
-    item = _buscar_selector_visible(page, selectores)
-    if not item:
-        if requerido:
-            raise RuntimeError(f"No se encontró elemento visible: {descripcion or selectores}")
-        return False
-    item.scroll_into_view_if_needed()
-    item.click(force=force)
-    return True
+    ultimo_error = None
+    for _ in range(3):
+        item = _buscar_selector_visible(page, selectores)
+        if not item:
+            if requerido:
+                raise RuntimeError(f"No se encontró elemento visible: {descripcion or selectores}")
+            return False
+        try:
+            item.scroll_into_view_if_needed()
+            item.click(force=force)
+            return True
+        except Exception as error:
+            ultimo_error = error
+            if not _error_transitorio_locator(error):
+                raise
+            page.wait_for_timeout(150)
+
+    if requerido and ultimo_error:
+        raise RuntimeError(f"No se pudo clickear elemento visible: {descripcion or selectores} ({ultimo_error})")
+    return False
 
 
 def _click_todos_selectores_visibles(page, selectores, force=False):
@@ -294,8 +352,14 @@ def _click_todos_selectores_visibles(page, selectores, force=False):
                     continue
                 if not item.is_enabled():
                     continue
-                item.scroll_into_view_if_needed()
-                item.click(force=force)
+                try:
+                    item.scroll_into_view_if_needed()
+                    item.click(force=force)
+                except Exception as error:
+                    if _error_transitorio_locator(error):
+                        page.wait_for_timeout(120)
+                        continue
+                    raise
                 clickeado = True
                 page.wait_for_timeout(120)
             except Exception:

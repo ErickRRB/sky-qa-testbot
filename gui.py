@@ -695,7 +695,7 @@ class SkyBotGUI:
         self.pause_button.pack(side=tk.RIGHT, padx=(8, 0))
         self.continue_button = ttk.Button(
             self.acciones_frame,
-            text="Continuar",
+            text="▶ Continuar",
             command=self._continuar_despues_edicion,
             state=tk.DISABLED,
         )
@@ -1633,15 +1633,37 @@ class SkyBotGUI:
                 self.pausa_solicitada = False
         self.root.after(120, self._procesar_cola)
 
-    def _actualizar_estado_pausa(self):
+    def _leer_estado_pausado(self):
         paused_file = self._control_path("paused.state")
-        esta_pausado = bool(paused_file and paused_file.exists())
+        if not paused_file or not paused_file.exists():
+            return None
+
+        data = {}
+        try:
+            for linea in paused_file.read_text(encoding="utf-8").splitlines():
+                if "=" not in linea:
+                    continue
+                clave, valor = linea.split("=", 1)
+                data[clave.strip()] = valor.strip()
+        except Exception:
+            return {"stage": "DESCONOCIDA", "context": ""}
+        return data
+
+    def _actualizar_estado_pausa(self):
+        pausa_info = self._leer_estado_pausado()
+        esta_pausado = pausa_info is not None
         proceso_activo = bool(self.process and self.process.poll() is None)
 
         if esta_pausado:
             self.pause_button.configure(state=tk.DISABLED)
             self.continue_button.configure(state=tk.NORMAL)
-            self.status_var.set("Pausado para edición manual")
+            etapa = pausa_info.get("stage", "DESCONOCIDA")
+            contexto = pausa_info.get("context", "")
+            if contexto.startswith("recovery:"):
+                motivo = contexto.split(":", 1)[1] or "error"
+                self.status_var.set(f"Corrección requerida en {etapa} ({motivo})")
+            else:
+                self.status_var.set(f"Pausado para edición manual en {etapa}")
             return
 
         if proceso_activo:

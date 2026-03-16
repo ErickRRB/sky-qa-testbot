@@ -18,6 +18,7 @@ import core.state as state
 from core.helpers import (
     _activar_modo_manual,
     _buscar_selector_visible,
+    gestionar_pausa_edicion,
     pausar_en_checkpoint,
 )
 
@@ -73,6 +74,7 @@ def _esperar_medio_pago_visible(page, nombre_medio, timeout_ms=45000):
     ]
 
     while time.monotonic() < deadline:
+        gestionar_pausa_edicion(page, f"esperando_medio_pago_{nombre_medio.lower().replace(' ', '_')}")
         item = _buscar_selector_visible(page, selectores_medio)
         if item:
             return item

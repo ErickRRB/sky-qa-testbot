@@ -18,7 +18,9 @@ from core.helpers import (
     _rellenar_input_visible,
     _click_texto_visible,
     _click_ultimo_texto_visible,
+    detectar_etapa_actual,
     _guardar_html_debug,
+    gestionar_pausa_edicion,
     pausar_en_checkpoint,
 )
 from core.search_flow import _saltar_extras, _seleccionar_opcion_dropdown
@@ -40,11 +42,13 @@ def _esperar_o_avanzar_hasta_pasajeros(page, timeout_ms=60000):
     deadline = time.monotonic() + timeout_ms / 1000
 
     while time.monotonic() < deadline:
+        gestionar_pausa_edicion(page, "esperando_llegada_pasajeros")
         url_actual = page.url or ""
         if "passenger-detail" in url_actual or "checkout" in url_actual:
             return
 
-        _saltar_extras(page)
+        if detectar_etapa_actual(page) == "SELECCION_TARIFA":
+            _saltar_extras(page, verbose=False)
         page.wait_for_timeout(1200)
 
     raise RuntimeError(
@@ -57,6 +61,7 @@ def _avanzar_a_checkout(page, timeout_ms=60000):
     deadline = time.monotonic() + timeout_ms / 1000
 
     while time.monotonic() < deadline:
+        gestionar_pausa_edicion(page, "avanzando_checkout")
         if "checkout" in (page.url or ""):
             return True
 

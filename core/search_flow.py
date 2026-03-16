@@ -10,6 +10,7 @@ Flujo de búsqueda de vuelo:
 
 import re
 import time
+from datetime import datetime, timedelta
 
 import core.state as state
 from core.helpers import (
@@ -21,6 +22,8 @@ from core.helpers import (
     _click_texto_visible,
     _input_editable,
     _capturar_estado_ui,
+    detectar_etapa_actual,
+    gestionar_pausa_edicion,
 )
 
 
@@ -33,6 +36,7 @@ def _esperar_home_lista(page, timeout_ms=45000):
     deadline = time.monotonic() + timeout_ms / 1000
     ultimo_error = None
     while time.monotonic() < deadline:
+        gestionar_pausa_edicion(page, "esperando_home")
         try:
             origen = _buscar_selector_visible(
                 page,
@@ -151,6 +155,7 @@ def _seleccionar_ciudad(page, contenedor_selector, ciudad):
 
     input_ciudad = None
     for intento in range(20):
+        gestionar_pausa_edicion(page, f"seleccion_ciudad_{ciudad}")
         page.wait_for_timeout(200)
         input_ciudad = _input_editable(page.locator(":focus"))
         if not input_ciudad:
@@ -218,6 +223,36 @@ def _seleccionar_ciudad(page, contenedor_selector, ciudad):
     raise RuntimeError(f"No se encontró opción de autocompletado para ciudad '{ciudad}'.")
 
 
+def _ciudad_aplicada_en_contenedor(page, contenedor_selector, ciudad):
+    contenedor = page.locator(contenedor_selector).first
+    try:
+        if not contenedor.is_visible():
+            return False
+    except Exception:
+        return False
+
+    valores = []
+    try:
+        texto = _normalizar_texto(contenedor.inner_text())
+        if texto:
+            valores.append(texto)
+    except Exception:
+        pass
+
+    inputs = contenedor.locator("input")
+    for indice in range(inputs.count()):
+        campo = inputs.nth(indice)
+        try:
+            valor = _normalizar_texto(campo.input_value())
+            if valor:
+                valores.append(valor)
+        except Exception:
+            continue
+
+    ciudad_normalizada = ciudad.lower()
+    return any(ciudad_normalizada in valor.lower() for valor in valores)
+
+
 def _seleccionar_opcion_dropdown(page, texto_opcion):
     if _click_texto_visible(page, texto_opcion, exacto=True):
         return True
@@ -235,7 +270,7 @@ def _seleccionar_opcion_dropdown(page, texto_opcion):
 # ==========================================
 
 def _cerrar_calendario_si_abierto(page):
-    dias_calendario = page.locator('div.vc-day-content[aria-disabled="false"]')
+    dias_calendario = page.locator('div.vc-day-content, [role="button"].vc-day-content, button.vc-title')
     for _ in range(4):
         if not _buscar_visible(dias_calendario):
             return
@@ -440,12 +475,95 @@ def _configurar_pasajeros_busqueda(page):
     _capturar_estado_ui(page, "selector_pasajeros_configurado")
 
 
+def _pasajeros_busqueda_aplicados(page):
+    adultos = state.CFG["pasajeros"]["adultos"]
+    ninos = state.CFG["pasajeros"]["ninos"]
+    infantes = state.CFG["pasajeros"]["infantes"]
+    total = adultos + ninos + infantes
+
+    if total <= 1 and ninos == 0 and infantes == 0:
+        return True
+
+    wrappers = page.locator(
+        'div.wrapper:has(label:has-text("Pasajeros")), '
+        'div.wrapper:has(label:has-text("Passenger")), '
+        'div.wrapper:has(label:has-text("Passageiros")), '
+        "#passengers-id"
+    )
+    patron_total = re.compile(rf"\b{total}\b")
+
+    for indice in range(wrappers.count()):
+        item = wrappers.nth(indice)
+        try:
+            if not item.is_visible():
+                continue
+            texto = _normalizar_texto(item.inner_text())
+            if patron_total.search(texto):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _iniciar_busqueda(page):
+    _cerrar_panel_login_si_abierto(page)
+    if not _click_selector_visible(
+        page,
+        ['button:has-text("Buscar vuelo")', 'button:has-text("Buscar voo")', 'button:has-text("Search")'],
+        force=True,
+        requerido=True,
+        descripcion="botón Buscar vuelo",
+    ):
+        raise RuntimeError("No se pudo iniciar la búsqueda de vuelos.")
+    page.wait_for_timeout(1500)
+    _cerrar_panel_login_si_abierto(page)
+
+
+def _esperar_resultados_busqueda(page, timeout_ms=45000):
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        gestionar_pausa_edicion(page, "esperando_resultados_busqueda")
+        etapa_actual = detectar_etapa_actual(page)
+        if etapa_actual != "BUSQUEDA":
+            return etapa_actual
+        if _buscar_selector_visible(
+            page,
+            [
+                'button:has-text("Elegir vuelo")',
+                '[data-test^="is-itinerary-selectFlight"]',
+                '[data-test^="is-itinerary-selectRate"]',
+            ],
+        ):
+            return "SELECCION_TARIFA"
+        page.wait_for_timeout(500)
+
+    raise RuntimeError(f"La búsqueda no avanzó fuera de BUSQUEDA dentro de {timeout_ms}ms. URL actual: {page.url}")
+
+
 # ==========================================
 # FECHAS
 # ==========================================
 
 def _abrir_calendario_fechas(page):
+    def calendario_visible():
+        return bool(
+            _buscar_visible(page.locator("button.vc-title"))
+            or _buscar_visible(page.locator('[role="button"].vc-day-content'))
+            or _buscar_selector_visible(
+                page,
+                [
+                    ':text("Seleccionar fecha de ida")',
+                    ':text("Seleccionar fecha de ida y vuelta")',
+                    ':text("Departure date")',
+                    ':text("Fecha de ida")',
+                ],
+            )
+        )
+
     candidatos = [
+        'div.wrapper.width-min-calendar .textfield_input',
+        'div.wrapper.width-min-calendar .textfield_icon',
+        'div.wrapper.width-min-calendar input',
         'div.wrapper:has(label:has-text("Solo ida"))',
         'div.wrapper:has(label:has-text("One way"))',
         'div.wrapper:has(label:has-text("Somente ida"))',
@@ -457,16 +575,33 @@ def _abrir_calendario_fechas(page):
         'div.wrapper:has(label:has-text("Departure"))',
     ]
 
-    abierto = _click_selector_visible(page, candidatos, force=True)
-    if not abierto:
-        raise RuntimeError("No se pudo abrir el calendario de fechas.")
+    if calendario_visible():
+        return
 
-    for _ in range(20):
-        if _buscar_visible(page.locator('div.vc-day-content[aria-disabled="false"]')):
-            return
-        page.wait_for_timeout(150)
+    ultimo_error = None
+    for _ in range(4):
+        for selector in candidatos:
+            try:
+                item = _buscar_selector_visible(page, [selector])
+                if not item:
+                    continue
+                item.scroll_into_view_if_needed()
+                item.click(force=True)
+                page.wait_for_timeout(250)
+                if calendario_visible():
+                    return
+                try:
+                    item.click(force=True)
+                    page.wait_for_timeout(250)
+                    if calendario_visible():
+                        return
+                except Exception:
+                    pass
+            except Exception as error:
+                ultimo_error = error
+                continue
 
-    raise RuntimeError("El calendario no mostró días habilitados.")
+    raise RuntimeError(f"El calendario no quedó visible/listo para seleccionar fechas. Último error: {ultimo_error}")
 
 
 def _obtener_dias_disponibles_calendario(page):
@@ -476,12 +611,91 @@ def _obtener_dias_disponibles_calendario(page):
     return page.locator('div.vc-day-content[aria-disabled="false"]')
 
 
+_MESES_VARIANTES = {
+    1: ["enero", "ene", "january", "jan", "janeiro"],
+    2: ["febrero", "feb", "february", "fevereiro"],
+    3: ["marzo", "mar", "march", "marco", "março"],
+    4: ["abril", "abr", "april"],
+    5: ["mayo", "may", "maio"],
+    6: ["junio", "jun", "june", "junho"],
+    7: ["julio", "jul", "july", "julho"],
+    8: ["agosto", "ago", "aug", "august"],
+    9: ["septiembre", "setiembre", "sep", "sept", "september", "set", "setembro"],
+    10: ["octubre", "oct", "october", "out", "outubro"],
+    11: ["noviembre", "nov", "november"],
+    12: ["diciembre", "dic", "dec", "december", "dez", "dezembro"],
+}
+
+
+def _fecha_objetivo_ida():
+    return (datetime.now() + timedelta(days=state.CFG["dias"])).date()
+
+
+def _fecha_objetivo_vuelta():
+    return _fecha_objetivo_ida() + timedelta(days=state.CFG.get("dias_retorno", 0))
+
+
+def _texto_contiene_fecha_objetivo(texto, fecha_objetivo):
+    texto_normalizado = _normalizar_texto(texto).lower()
+    if not texto_normalizado:
+        return False
+
+    if str(fecha_objetivo.year) not in texto_normalizado:
+        return False
+
+    numeros = re.findall(r"\d{1,4}", texto_normalizado)
+    numeros_normalizados = set()
+    for numero in numeros:
+        numeros_normalizados.add(numero)
+        try:
+            numeros_normalizados.add(str(int(numero)))
+        except Exception:
+            continue
+
+    if str(fecha_objetivo.day) not in numeros_normalizados:
+        return False
+
+    if any(mes in texto_normalizado for mes in _MESES_VARIANTES[fecha_objetivo.month]):
+        return True
+
+    formatos_numericos = [
+        fecha_objetivo.strftime("%d/%m/%Y"),
+        fecha_objetivo.strftime("%d-%m-%Y"),
+    ]
+    return any(formato.lower() in texto_normalizado for formato in formatos_numericos)
+
+
 def _fecha_aplicada_en_wrapper(page):
-    patron_fecha = re.compile(r"\b\d{1,2}\s+[A-Za-zÁÉÍÓÚáéíóú]{3,}\s+\d{4}\b")
+    fecha_ida = _fecha_objetivo_ida()
+    fecha_vuelta = _fecha_objetivo_vuelta() if state.CFG["tipo_viaje"] == "ROUND_TRIP" else None
+    inputs = page.locator(
+        "div.wrapper.width-min-calendar input, "
+        'div.wrapper:has(label:has-text("Fecha de ida")) input, '
+        'div.wrapper:has(label:has-text("Fecha de ida y vuelta")) input, '
+        'div.wrapper:has(label:has-text("Departure")) input, '
+        'div.wrapper:has(label:has-text("One way")) input, '
+        'div.wrapper:has(label:has-text("Solo ida")) input',
+    )
+
+    se_encontraron_inputs_visibles = False
+    for idx_input in range(inputs.count()):
+        campo = inputs.nth(idx_input)
+        try:
+            if not campo.is_visible():
+                continue
+            se_encontraron_inputs_visibles = True
+            valor = _normalizar_texto(campo.input_value())
+            if valor and _texto_contiene_fecha_objetivo(valor, fecha_ida):
+                if not fecha_vuelta or _texto_contiene_fecha_objetivo(valor, fecha_vuelta):
+                    return True
+        except Exception:
+            continue
+
+    if se_encontraron_inputs_visibles:
+        return False
+
     wrappers = page.locator(
         "div.wrapper.width-min-calendar, "
-        'div.wrapper:has(.sky-layout-calendar), '
-        'div.wrapper:has(.inner-component-calendar), '
         'div.wrapper:has(label:has-text("Fecha de ida")), '
         'div.wrapper:has(label:has-text("Fecha de ida y vuelta")), '
         'div.wrapper:has(label:has-text("Departure"))',
@@ -493,21 +707,12 @@ def _fecha_aplicada_en_wrapper(page):
             if not item.is_visible():
                 continue
 
-            inputs = item.locator("input")
-            for idx_input in range(inputs.count()):
-                campo = inputs.nth(idx_input)
-                try:
-                    if not campo.is_visible():
-                        continue
-                    valor = _normalizar_texto(campo.input_value())
-                    if valor and patron_fecha.search(valor):
-                        return True
-                except Exception:
-                    continue
-
             texto = _normalizar_texto(item.inner_text()).replace("  -  ", " - ")
-            if patron_fecha.search(texto):
-                return True
+            if not texto or texto.lower() in {"solo ida", "ida-vuelta", "one way", "departure"}:
+                continue
+            if _texto_contiene_fecha_objetivo(texto, fecha_ida):
+                if not fecha_vuelta or _texto_contiene_fecha_objetivo(texto, fecha_vuelta):
+                    return True
         except Exception:
             continue
     return False
@@ -550,9 +755,152 @@ def _click_dia_calendario(page, dias_locator, indice, etiqueta):
     raise RuntimeError(f"No se pudo seleccionar fecha de {etiqueta} en índice {indice_real}.")
 
 
-def _seleccionar_fechas(page):
-    page.wait_for_timeout(600)
-    _abrir_calendario_fechas(page)
+def _click_fecha_objetivo_visible(page, fecha_objetivo):
+    titulos_vcalendar = page.locator("button.vc-title")
+    for indice in range(titulos_vcalendar.count()):
+        titulo = titulos_vcalendar.nth(indice)
+        try:
+            if not titulo.is_visible():
+                continue
+            texto_titulo = _normalizar_texto(titulo.inner_text()).lower()
+            if str(fecha_objetivo.year) not in texto_titulo:
+                continue
+            if not any(mes in texto_titulo for mes in _MESES_VARIANTES[fecha_objetivo.month]):
+                continue
+
+            pane = titulo.locator('xpath=ancestor::div[contains(@class,"vc-pane")][1]')
+            dias_pane = pane.locator('[role="button"].vc-day-content')
+            for idx_dia in range(dias_pane.count()):
+                dia = dias_pane.nth(idx_dia)
+                try:
+                    if not dia.is_visible():
+                        continue
+                    if _normalizar_texto(dia.inner_text()) != str(fecha_objetivo.day):
+                        continue
+                    clases = (dia.get_attribute("class") or "").lower()
+                    if "vc-disabled" in clases or "disabled" in clases:
+                        continue
+                    dia.click(force=True, timeout=4000)
+                    return True
+                except Exception:
+                    continue
+        except Exception:
+            continue
+
+    payload = {
+        "day": str(fecha_objetivo.day),
+        "year": str(fecha_objetivo.year),
+        "month_names": _MESES_VARIANTES[fecha_objetivo.month],
+    }
+
+    return page.evaluate(
+        """
+        ({ day, year, month_names }) => {
+          const norm = (value) =>
+            (value || "")
+              .normalize("NFD")
+              .replace(/[\\u0300-\\u036f]/g, "")
+              .toLowerCase()
+              .replace(/\\s+/g, " ")
+              .trim();
+
+          const visible = (el) => {
+            if (!el || !el.isConnected) return false;
+            const style = window.getComputedStyle(el);
+            if (!style || style.display === "none" || style.visibility === "hidden") return false;
+            const rect = el.getBoundingClientRect();
+            return rect.width > 6 && rect.height > 6;
+          };
+
+          const disabled = (el) => {
+            const cls = norm(el?.className || "");
+            return (
+              !el ||
+              el.disabled ||
+              el.getAttribute("aria-disabled") === "true" ||
+              cls.includes("disabled") ||
+              cls.includes("unavailable") ||
+              cls.includes("not-in-month") ||
+              cls.includes("blocked")
+            );
+          };
+
+          const monthTokens = month_names.map(norm);
+          const all = [...document.querySelectorAll("body *")].filter(visible);
+          const monthHeaders = all.filter((el) => monthTokens.includes(norm(el.textContent)));
+
+          for (const header of monthHeaders) {
+            let container = header;
+            for (let depth = 0; depth < 7 && container; depth += 1, container = container.parentElement) {
+              const text = norm(container?.textContent);
+              if (!text || !text.includes(year) || !monthTokens.some((month) => text.includes(month))) continue;
+
+              const candidates = [...container.querySelectorAll("button, div, span")].filter((el) => {
+                return visible(el) && !disabled(el) && norm(el.textContent) === day;
+              });
+              if (candidates.length > 0) {
+                candidates[0].click();
+                return true;
+              }
+            }
+          }
+
+          const attrCandidates = all.filter((el) => {
+            if (disabled(el)) return false;
+            const haystack = norm(
+              [
+                el.getAttribute("aria-label"),
+                el.getAttribute("title"),
+                el.getAttribute("data-date"),
+                el.textContent,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            );
+            return haystack.includes(year) && monthTokens.some((month) => haystack.includes(month)) && haystack.includes(day);
+          });
+          if (attrCandidates.length > 0) {
+            attrCandidates[0].click();
+            return true;
+          }
+
+          return false;
+        }
+        """,
+        payload,
+    )
+
+
+def _avanzar_calendario(page):
+    return _click_selector_visible(
+        page,
+        [
+            'button[aria-label*="siguiente" i]',
+            'button[aria-label*="next" i]',
+            'button[aria-label*="mes siguiente" i]',
+            'button:has(svg[class*="right"])',
+            'button:has(i[class*="right"])',
+            '[class*="calendar"] [class*="right"]',
+        ],
+        force=True,
+        requerido=False,
+    )
+
+
+def _seleccionar_fecha_objetivo(page, fecha_objetivo, etiqueta):
+    for _ in range(10):
+        gestionar_pausa_edicion(page, f"seleccion_fecha_{etiqueta}")
+        if _click_fecha_objetivo_visible(page, fecha_objetivo):
+            page.wait_for_timeout(450)
+            return
+        if not _avanzar_calendario(page):
+            break
+        page.wait_for_timeout(350)
+
+    raise RuntimeError(f"No se pudo seleccionar fecha de {etiqueta}: {fecha_objetivo.isoformat()}.")
+
+
+def _seleccionar_fechas_por_indice(page):
     dias_disponibles = _obtener_dias_disponibles_calendario(page)
     cantidad_dias = dias_disponibles.count()
     if cantidad_dias == 0:
@@ -573,6 +921,18 @@ def _seleccionar_fechas(page):
             indice_vuelta = indice_ida + 1
 
         _click_dia_calendario(page, dias_retorno, indice_vuelta, "vuelta")
+
+
+def _seleccionar_fechas(page):
+    page.wait_for_timeout(600)
+    _abrir_calendario_fechas(page)
+    try:
+        _seleccionar_fecha_objetivo(page, _fecha_objetivo_ida(), "ida")
+        if state.CFG["tipo_viaje"] == "ROUND_TRIP":
+            _seleccionar_fecha_objetivo(page, _fecha_objetivo_vuelta(), "vuelta")
+    except Exception as error:
+        print(f"⚠️ Selección exacta de fechas falló ({error}). Se intenta fallback por índice.")
+        _seleccionar_fechas_por_indice(page)
 
     if not _fecha_aplicada_en_wrapper(page):
         raise RuntimeError("La fecha seleccionada no quedó aplicada en el buscador.")
@@ -661,6 +1021,7 @@ def _url_contiene(page, fragmento):
 def _esperar_cambio_post_accion(page, url_previa, timeout_ms=12000):
     deadline = time.monotonic() + timeout_ms / 1000
     while time.monotonic() < deadline:
+        gestionar_pausa_edicion(page, "esperando_cambio_post_accion")
         if (page.url or "") != url_previa:
             return True
         if _buscar_selector_visible(
@@ -823,6 +1184,7 @@ def _ajustar_cantidad_servicio_lateral(page, cantidad_objetivo):
     deadline = time.monotonic() + 5
 
     while time.monotonic() < deadline and boton_sumar is None:
+        gestionar_pausa_edicion(page, "ancillary_panel_lateral")
         botones = page.locator("button.sky-select-number_button")
         for indice in range(botones.count()):
             boton = botones.nth(indice)
@@ -940,8 +1302,9 @@ def _resolver_pantalla_ancillaries(page):
     return False
 
 
-def _saltar_extras(page):
-    print("--- Saltando Extras ---")
+def _saltar_extras(page, verbose=True):
+    if verbose:
+        print("--- Saltando Extras ---")
     if _url_contiene(page, "/seats"):
         if not _resolver_pantalla_asientos(page):
             print("⚠️ Pantalla de asientos aún no lista para avanzar. Reintentando...")

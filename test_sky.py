@@ -21,7 +21,12 @@ from core.helpers import (
 )
 from core.search_flow import (
     _cerrar_panel_login_si_abierto,
+    _ciudad_aplicada_en_contenedor,
     _esperar_home_lista,
+    _esperar_resultados_busqueda,
+    _fecha_aplicada_en_wrapper,
+    _iniciar_busqueda,
+    _pasajeros_busqueda_aplicados,
     _seleccionar_tipo_viaje,
     _seleccionar_ciudad,
     _seleccionar_fechas,
@@ -67,43 +72,41 @@ def run(playwright: Playwright) -> None:
             _capturar_estado_ui(page, "landing_ready")
             gestionar_pausa_edicion(page, "landing_ready")
 
-            # -------------------------------------------
-            # 1. BÚSQUEDA DE VUELO
-            # -------------------------------------------
-            _seleccionar_tipo_viaje(page)
-            _capturar_estado_ui(page, "tipo_viaje")
-
-            _seleccionar_ciudad(page, "#origin-id", state.CFG["origen"])
-            _seleccionar_ciudad(page, "#destination-id", state.CFG["destino"])
-
-            _seleccionar_fechas(page)
-            _configurar_pasajeros_busqueda(page)
-            _capturar_estado_ui(page, "busqueda_configurada")
-
-            _cerrar_panel_login_si_abierto(page)
-            if not _click_selector_visible(
-                page,
-                ['button:has-text("Buscar vuelo")', 'button:has-text("Buscar voo")', 'button:has-text("Search")'],
-                force=True,
-                requerido=True,
-                descripcion="botón Buscar vuelo",
-            ):
-                raise RuntimeError("No se pudo iniciar la búsqueda de vuelos.")
-            page.wait_for_timeout(1500)
-            _cerrar_panel_login_si_abierto(page)
-            _capturar_estado_ui(page, "post_busqueda")
-            gestionar_pausa_edicion(page, "post_busqueda")
-
-            if state.CFG["solo_exploracion"]:
-                print("🧪 Solo exploración activo: flujo detenido tras búsqueda.")
-                return
-
-            # 🛑 Checkpoint: Después de búsqueda
-            if pausar_en_checkpoint(page, "BUSQUEDA"):
-                return
-
             while True:
                 try:
+                    # -------------------------------------------
+                    # 1. BÚSQUEDA DE VUELO
+                    # -------------------------------------------
+                    etapa_actual = detectar_etapa_actual(page)
+                    if not etapa_en_o_despues(etapa_actual, "SELECCION_TARIFA"):
+                        _seleccionar_tipo_viaje(page)
+                        _capturar_estado_ui(page, "tipo_viaje")
+
+                        if not _ciudad_aplicada_en_contenedor(page, "#origin-id", state.CFG["origen"]):
+                            _seleccionar_ciudad(page, "#origin-id", state.CFG["origen"])
+
+                        if not _ciudad_aplicada_en_contenedor(page, "#destination-id", state.CFG["destino"]):
+                            _seleccionar_ciudad(page, "#destination-id", state.CFG["destino"])
+
+                        if not _fecha_aplicada_en_wrapper(page):
+                            _seleccionar_fechas(page)
+
+                        if not _pasajeros_busqueda_aplicados(page):
+                            _configurar_pasajeros_busqueda(page)
+
+                        _capturar_estado_ui(page, "busqueda_configurada")
+                        _iniciar_busqueda(page)
+                        _esperar_resultados_busqueda(page)
+                        _capturar_estado_ui(page, "post_busqueda")
+                        gestionar_pausa_edicion(page, "post_busqueda")
+
+                        if state.CFG["solo_exploracion"]:
+                            print("🧪 Solo exploración activo: flujo detenido tras búsqueda.")
+                            return
+
+                        if pausar_en_checkpoint(page, "BUSQUEDA"):
+                            return
+
                     # -------------------------------------------
                     # 2. SELECCIÓN DE TARIFA
                     # -------------------------------------------
@@ -127,8 +130,13 @@ def run(playwright: Playwright) -> None:
                         elif etapa_actual != "DESCONOCIDA":
                             print(f"ℹ️ Reanudando desde etapa detectada: {etapa_actual}")
 
-                        if not etapa_en_o_despues(detectar_etapa_actual(page), "DATOS_PASAJERO"):
-                            etapa_pre_extras = detectar_etapa_actual(page)
+                        etapa_pre_extras = detectar_etapa_actual(page)
+                        if etapa_pre_extras in {"BUSQUEDA", "DESCONOCIDA"}:
+                            raise RuntimeError(
+                                f"El flujo sigue en etapa {etapa_pre_extras} y no debe avanzar a extras todavía.",
+                            )
+
+                        if not etapa_en_o_despues(etapa_pre_extras, "DATOS_PASAJERO"):
                             if etapa_pre_extras == "SELECCION_TARIFA" and pausar_en_checkpoint(page, "ANCILLARIES"):
                                 return
                             _saltar_extras(page)

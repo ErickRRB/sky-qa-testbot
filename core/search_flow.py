@@ -604,10 +604,25 @@ def _seleccionar_vuelo_y_tarifa(page, tramo):
     for indice in range(botones_vuelo.count()):
         try:
             boton_vuelo = botones_vuelo.nth(indice)
+            url_previa = page.url or ""
             boton_vuelo.scroll_into_view_if_needed()
             page.wait_for_timeout(300)
             boton_vuelo.click(force=True)
-            page.wait_for_selector('[data-test^="is-itinerary-selectRate"]', timeout=10000)
+            deadline = time.monotonic() + 12
+            while time.monotonic() < deadline:
+                url_actual = page.url or ""
+                if _buscar_selector_visible(page, ['[data-test^="is-itinerary-selectRate"]']):
+                    seleccionado = True
+                    break
+                if url_actual != url_previa and any(
+                    fragmento in url_actual.lower()
+                    for fragmento in ("/seats", "/additional-services", "passenger-detail", "checkout")
+                ):
+                    seleccionado = True
+                    break
+                page.wait_for_timeout(250)
+            if not seleccionado:
+                raise RuntimeError("La UI no avanzó a tarifas ni a la siguiente etapa.")
             seleccionado = True
             break
         except Exception as error:
@@ -617,6 +632,8 @@ def _seleccionar_vuelo_y_tarifa(page, tramo):
         raise RuntimeError(f"No fue posible seleccionar vuelo para {tramo}.")
 
     botones_tarifa = page.locator('[data-test^="is-itinerary-selectRate"] button')
+    if _url_contiene(page, "/seats") or _url_contiene(page, "/additional-services"):
+        return
     if botones_tarifa.count() == 0:
         botones_tarifa = page.locator('button:has-text("Seleccionar"), button:has-text("Selecionar"), button:has-text("Select")')
 

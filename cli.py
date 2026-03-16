@@ -187,6 +187,11 @@ Ejemplos:
         action="store_true",
         help="Termina después de la búsqueda (sin selección de tarifa ni pago). Implica modo exploración",
     )
+    grupo_rutas.add_argument(
+        "--control-dir",
+        type=str,
+        help="Directorio temporal de control para pausa/reanudación desde la GUI",
+    )
 
     # --- 2. Datos del Vuelo ---
     grupo_vuelo = parser.add_argument_group("Datos del Vuelo")
@@ -384,6 +389,7 @@ def aplicar_args(args):
         "usar_chrome_existente": args.usar_chrome_existente,
         "cdp_url": args.cdp_url or CDP_URL_DEFAULT,
         "cdp_reutilizar_primera_pestana": args.cdp_reutilizar_primera_pestana,
+        "control_dir": args.control_dir,
         "headless": args.headless,
         "modo_exploracion": args.modo_exploracion or args.solo_exploracion,
         "solo_exploracion": args.solo_exploracion,

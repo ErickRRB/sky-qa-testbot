@@ -21,6 +21,8 @@ Formato recomendado por entrada:
   - `--maletas-bodega`
 - GUI y presets actualizados para persistir estrategia de asiento y maletas.
 - Navegación post-tarifa endurecida para variantes visuales nuevas en `seats` y `additional-services` de QA/Stage.
+- Checkpoints en modo visual ahora reanudan la ejecución detectando la etapa actual en lugar de cortar siempre el flujo.
+- Checkout de pago endurecido para variantes donde las pasarelas quedan detrás del acordeón `Más medios de pago`.
 
 ### Added
 - Documentación AI-first:

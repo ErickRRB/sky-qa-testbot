@@ -12,6 +12,10 @@ from core.helpers import (
     _capturar_estado_ui,
     _click_selector_visible,
     _activar_modo_manual,
+    detectar_etapa_actual,
+    etapa_en_o_despues,
+    gestionar_pausa_edicion,
+    _buscar_selector_visible,
     pausar_en_checkpoint,
 )
 from core.search_flow import (
@@ -60,6 +64,7 @@ def run(playwright: Playwright) -> None:
             _esperar_home_lista(page)
             _cerrar_panel_login_si_abierto(page)
             _capturar_estado_ui(page, "landing_ready")
+            gestionar_pausa_edicion(page, "landing_ready")
 
             # -------------------------------------------
             # 1. BÚSQUEDA DE VUELO
@@ -86,6 +91,7 @@ def run(playwright: Playwright) -> None:
             page.wait_for_timeout(1500)
             _cerrar_panel_login_si_abierto(page)
             _capturar_estado_ui(page, "post_busqueda")
+            gestionar_pausa_edicion(page, "post_busqueda")
 
             if state.CFG["solo_exploracion"]:
                 print("🧪 Solo exploración activo: flujo detenido tras búsqueda.")
@@ -98,14 +104,32 @@ def run(playwright: Playwright) -> None:
             # -------------------------------------------
             # 2. SELECCIÓN DE TARIFA
             # -------------------------------------------
-            _seleccionar_vuelo_y_tarifa(page, "IDA")
-            if state.CFG["tipo_viaje"] == "ROUND_TRIP":
-                _seleccionar_vuelo_y_tarifa(page, "VUELTA")
-                _capturar_estado_ui(page, "vuelo_vuelta_seleccionado")
+            etapa_actual = detectar_etapa_actual(page)
+            debe_intentar_seleccion_vuelo = (
+                etapa_actual == "DESCONOCIDA"
+                or _buscar_selector_visible(
+                    page,
+                    ['button:has-text("Elegir vuelo")', '[data-test^="is-itinerary-selectFlight"]'],
+                )
+            )
+
+            if not etapa_en_o_despues(etapa_actual, "DATOS_PASAJERO"):
+                if debe_intentar_seleccion_vuelo:
+                    _seleccionar_vuelo_y_tarifa(page, "IDA")
+                    if state.CFG["tipo_viaje"] == "ROUND_TRIP":
+                        _seleccionar_vuelo_y_tarifa(page, "VUELTA")
+                        _capturar_estado_ui(page, "vuelo_vuelta_seleccionado")
+                    else:
+                        _capturar_estado_ui(page, "vuelo_ida_seleccionado")
+                elif etapa_actual != "DESCONOCIDA":
+                    print(f"ℹ️ Reanudando desde etapa detectada: {etapa_actual}")
+
+                if not etapa_en_o_despues(detectar_etapa_actual(page), "DATOS_PASAJERO"):
+                    _saltar_extras(page)
+                    _capturar_estado_ui(page, "extras_saltados")
+                    gestionar_pausa_edicion(page, "extras_saltados")
             else:
-                _capturar_estado_ui(page, "vuelo_ida_seleccionado")
-            _saltar_extras(page)
-            _capturar_estado_ui(page, "extras_saltados")
+                print(f"ℹ️ Se omite selección de tarifa/extras; etapa detectada: {etapa_actual}")
 
             # 🛑 Checkpoint: Después de selección de tarifa
             if pausar_en_checkpoint(page, "SELECCION_TARIFA"):
@@ -114,14 +138,20 @@ def run(playwright: Playwright) -> None:
             # -------------------------------------------
             # 3. DATOS DEL PASAJERO
             # -------------------------------------------
-            _rellenar_todos_los_pasajeros(page)
-            _capturar_estado_ui(page, "pasajeros_completados")
+            etapa_actual = detectar_etapa_actual(page)
+            if not etapa_en_o_despues(etapa_actual, "CHECKOUT"):
+                _rellenar_todos_los_pasajeros(page)
+                _capturar_estado_ui(page, "pasajeros_completados")
+                gestionar_pausa_edicion(page, "pasajeros_completados")
+            else:
+                print(f"ℹ️ Se omite carga de pasajeros; etapa detectada: {etapa_actual}")
 
             # 🛑 Checkpoint: Después de datos del pasajero
             if pausar_en_checkpoint(page, "DATOS_PASAJERO"):
                 return
 
-            if not _avanzar_a_checkout(page, timeout_ms=90000):
+            etapa_actual = detectar_etapa_actual(page)
+            if not etapa_en_o_despues(etapa_actual, "CHECKOUT") and not _avanzar_a_checkout(page, timeout_ms=90000):
                 _capturar_estado_ui(page, "post_confirmacion")
                 print("⚠️ No se pudo avanzar automáticamente a checkout.")
                 print("🖱️ Activando modo manual - continúa tú desde aquí")
@@ -129,12 +159,14 @@ def run(playwright: Playwright) -> None:
                 return
 
             _capturar_estado_ui(page, "post_confirmacion")
+            gestionar_pausa_edicion(page, "post_confirmacion")
 
             # -------------------------------------------
             # 4. CHECKOUT Y PAGO
             # -------------------------------------------
             print("--- Llegada al Checkout ---")
             _capturar_estado_ui(page, "checkout")
+            gestionar_pausa_edicion(page, "checkout")
 
             try:
                 expect(page).to_have_url(re.compile(".*checkout"), timeout=30000)

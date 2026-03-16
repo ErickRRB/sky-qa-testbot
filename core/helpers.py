@@ -6,9 +6,113 @@ Sin dependencias de flujo de negocio — importar desde cualquier módulo.
 
 import os
 import re
+import time
 from datetime import datetime
 
 import core.state as state
+
+
+_ETAPAS_ORDEN = {
+    "BUSQUEDA": 1,
+    "SELECCION_TARIFA": 2,
+    "DATOS_PASAJERO": 3,
+    "CHECKOUT": 4,
+    "PAGO": 5,
+    "DESCONOCIDA": 0,
+}
+
+
+def detectar_etapa_actual(page):
+    url = (page.url or "").lower()
+
+    if "checkout" in url:
+        return "CHECKOUT"
+    if "passenger-detail" in url:
+        return "DATOS_PASAJERO"
+    if "/seats" in url or "/additional-services" in url:
+        return "SELECCION_TARIFA"
+
+    if _buscar_selector_visible(
+        page,
+        [
+            'button:has-text("Elegir vuelo")',
+            '[data-test^="is-itinerary-selectFlight"]',
+            '[data-test^="is-itinerary-selectRate"]',
+        ],
+    ):
+        return "SELECCION_TARIFA"
+
+    if _buscar_selector_visible(
+        page,
+        [
+            "#origin-id",
+            "#destination-id",
+            'button:has-text("Buscar vuelo")',
+            'button:has-text("Buscar voo")',
+            'button:has-text("Search")',
+        ],
+    ):
+        return "BUSQUEDA"
+
+    return "DESCONOCIDA"
+
+
+def etapa_en_o_despues(etapa_actual, etapa_referencia):
+    return _ETAPAS_ORDEN.get(etapa_actual, 0) >= _ETAPAS_ORDEN.get(etapa_referencia, 0)
+
+
+def _control_path(nombre):
+    control_dir = state.CFG.get("control_dir")
+    if not control_dir:
+        return None
+    return os.path.join(control_dir, nombre)
+
+
+def _write_control_file(nombre, contenido=""):
+    path = _control_path(nombre)
+    if not path:
+        return None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as archivo:
+        archivo.write(contenido)
+    return path
+
+
+def _remove_control_file(nombre):
+    path = _control_path(nombre)
+    if not path:
+        return
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        return
+
+
+def gestionar_pausa_edicion(page, contexto=""):
+    pause_request = _control_path("pause.request")
+    if not pause_request or not os.path.exists(pause_request):
+        return detectar_etapa_actual(page)
+
+    etapa_actual = detectar_etapa_actual(page)
+    _remove_control_file("pause.request")
+    _remove_control_file("continue.request")
+    _write_control_file(
+        "paused.state",
+        f"stage={etapa_actual}\nurl={page.url}\ncontext={contexto}\ntimestamp={datetime.now().isoformat()}\n",
+    )
+    print(f"⏸️ Pausa para edición activada ({contexto or 'sin contexto'}).")
+    print(f"🖱️ Etapa actual detectada: {etapa_actual}")
+    print("▶️ Esperando 'Continuar' desde la GUI...")
+
+    while True:
+        continue_request = _control_path("continue.request")
+        if continue_request and os.path.exists(continue_request):
+            _remove_control_file("continue.request")
+            _remove_control_file("paused.state")
+            etapa_reanudada = detectar_etapa_actual(page)
+            print(f"▶️ Continuando ejecución desde etapa detectada: {etapa_reanudada}")
+            return etapa_reanudada
+        page.wait_for_timeout(250)
 
 
 # ==========================================
@@ -25,15 +129,20 @@ def pausar_en_checkpoint(page, checkpoint_actual):
             print("ℹ️  Headless activo: se omite page.pause() y se detiene la ejecución en el checkpoint.")
             return True
         page.pause()
-        return True
+        etapa_detectada = detectar_etapa_actual(page)
+        print(f"▶️ Reanudando ejecución desde etapa detectada: {etapa_detectada}")
+        return False
     return False
 
 
 def _activar_modo_manual(page):
     if state.CFG.get("headless"):
         print("ℹ️ Modo headless: se omite page.pause().")
-        return
+        return detectar_etapa_actual(page)
     page.pause()
+    etapa_detectada = detectar_etapa_actual(page)
+    print(f"▶️ Reanudando desde modo manual en etapa detectada: {etapa_detectada}")
+    return etapa_detectada
 
 
 # ==========================================

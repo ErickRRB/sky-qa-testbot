@@ -10,6 +10,7 @@ Para agregar un market: 1) implementar _pagar_<nombre>(page) aquí,
 """
 
 import re
+import time
 
 from playwright.sync_api import expect
 
@@ -33,6 +34,76 @@ def _prefill_contacto(page):
         page.locator("div").filter(has_text="Correo electrónico").last.locator("input.input").fill(state.CFG["pasajero"]["email"])
     except Exception as e:
         print(f"⚠️ Pre-fill contacto: {e}")
+
+
+def _expandir_mas_medios_pago(page):
+    return bool(
+        _buscar_selector_visible(
+            page,
+            [
+                'button:has-text("Más medios de pago")',
+                'button:has-text("Mas medios de pago")',
+                'button:has-text("Otros medios de pago")',
+                'button[aria-label*="payment methods" i]',
+                'button[aria-label*="medios de pago" i]',
+            ],
+        )
+    ) and (
+        _buscar_selector_visible(
+            page,
+            [
+                'button:has-text("Más medios de pago")',
+                'button:has-text("Mas medios de pago")',
+                'button:has-text("Otros medios de pago")',
+                'button[aria-label*="payment methods" i]',
+                'button[aria-label*="medios de pago" i]',
+            ],
+        ).click(force=True)
+        is None
+    )
+
+
+def _esperar_medio_pago_visible(page, nombre_medio, timeout_ms=45000):
+    deadline = time.monotonic() + timeout_ms / 1000
+    selectores_medio = [
+        f'text="{nombre_medio}"',
+        f'div:has-text("{nombre_medio}")',
+        f'[data-test*="{nombre_medio.lower().replace(" ", "-")}"]',
+        f'[data-test*="{nombre_medio.lower()}"]',
+    ]
+
+    while time.monotonic() < deadline:
+        item = _buscar_selector_visible(page, selectores_medio)
+        if item:
+            return item
+        _expandir_mas_medios_pago(page)
+        page.wait_for_timeout(700)
+
+    return None
+
+
+def _seleccionar_medio_pago(page, nombre_medio, contenedor_selector=None, radio_selector=None):
+    item = _esperar_medio_pago_visible(page, nombre_medio)
+    if not item:
+        raise RuntimeError(f"No apareció el medio de pago '{nombre_medio}'.")
+
+    if contenedor_selector:
+        try:
+            contenedor = page.locator(contenedor_selector)
+            contenedor.wait_for(state="visible", timeout=5000)
+            if radio_selector:
+                contenedor.locator(radio_selector).click(force=True)
+            else:
+                contenedor.click(force=True)
+            return
+        except Exception:
+            pass
+
+    try:
+        item.scroll_into_view_if_needed()
+    except Exception:
+        pass
+    item.click(force=True)
 
 
 def _buscar_iframe_mp(page, iframe_name):
@@ -99,15 +170,12 @@ def _finalizar_compra(page, boton_texto="Ir a pagar"):
 def _pagar_niubiz(page):
     """Perú — Niubiz"""
     try:
-        page.wait_for_selector('text="Niubiz"', timeout=45000)
+        _seleccionar_medio_pago(page, "Niubiz")
     except Exception as e:
         print(f"⚠️ Niubiz no apareció en 45s: {e}")
         print("🖱️ Activando modo manual - continúa tú desde aquí")
         _activar_modo_manual(page)
         return
-    niubiz_btn = page.locator("div").filter(has_text="Niubiz").last
-    niubiz_btn.scroll_into_view_if_needed()
-    niubiz_btn.click(force=True)
 
     print("Esperando animación del formulario...")
     page.wait_for_timeout(5000)
@@ -159,10 +227,7 @@ def _pagar_webpay(page):
     """
 
     # ── Paso 1: Seleccionar Webpay en el checkout de SKY ──
-    page.wait_for_selector('text="Webpay"', timeout=45000)
-    webpay_btn = page.locator("div").filter(has_text="Webpay").last
-    webpay_btn.scroll_into_view_if_needed()
-    webpay_btn.click(force=True)
+    _seleccionar_medio_pago(page, "Webpay")
 
     if pausar_en_checkpoint(page, "PAGO"):
         return
@@ -235,9 +300,12 @@ def _pagar_mercadopago(page):
     """
 
     # ── Paso 1: Seleccionar Mercado Pago en el checkout de SKY ──
-    mp_container = page.locator('[data-test="IS-paymentMethodList-cardFop-mercado-pago"]')
-    mp_container.wait_for(state="visible", timeout=45000)
-    mp_container.locator('[data-test="IS-cardFop-radioButton"]').click()
+    _seleccionar_medio_pago(
+        page,
+        "Mercado Pago",
+        contenedor_selector='[data-test="IS-paymentMethodList-cardFop-mercado-pago"]',
+        radio_selector='[data-test="IS-cardFop-radioButton"]',
+    )
 
     print("Esperando formulario Mercado Pago...")
     page.wait_for_timeout(5000)
@@ -342,10 +410,7 @@ def _pagar_mercadopago(page):
 def _pagar_cielo(page):
     # TODO pendiente revision
     """Brasil — Cielo"""
-    page.wait_for_selector('text="Cielo"', timeout=45000)
-    cielo_btn = page.locator("div").filter(has_text="Cielo").last
-    cielo_btn.scroll_into_view_if_needed()
-    cielo_btn.click(force=True)
+    _seleccionar_medio_pago(page, "Cielo")
 
     print("Esperando formulario Cielo...")
     page.wait_for_timeout(5000)

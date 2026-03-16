@@ -3,6 +3,7 @@ import queue
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -40,6 +41,7 @@ PYTHON_EXEC = sys.executable
 NO_CHECKPOINT = "NINGUNO"
 CDP_START_TIMEOUT_SEGUNDOS = 12
 GUI_SETTINGS_PATH = PROJECT_ROOT / ".sky_gui_settings.json"
+CONTROL_ROOT = PROJECT_ROOT / ".bot_runtime"
 MARKET_LABEL_TO_CODE = {
     "Perú": "PE",
     "Argentina": "AR",
@@ -144,6 +146,8 @@ class SkyBotGUI:
         self.queue = queue.Queue()
         self.cdp_iniciado_automaticamente = False
         self._suspend_preset_tracking = False
+        self.control_dir_actual = None
+        self.pausa_solicitada = False
 
         self._crear_variables()
         self.presets = self._presets_por_defecto()
@@ -680,6 +684,20 @@ class SkyBotGUI:
         self.run_button.pack(side=tk.RIGHT, padx=(8, 0))
         self.stop_button = ttk.Button(self.acciones_frame, text="Detener", command=self._detener_ejecucion, state=tk.DISABLED)
         self.stop_button.pack(side=tk.RIGHT, padx=(8, 0))
+        self.pause_button = ttk.Button(
+            self.acciones_frame,
+            text="Pausar para edición",
+            command=self._pausar_para_edicion,
+            state=tk.DISABLED,
+        )
+        self.pause_button.pack(side=tk.RIGHT, padx=(8, 0))
+        self.continue_button = ttk.Button(
+            self.acciones_frame,
+            text="Continuar",
+            command=self._continuar_despues_edicion,
+            state=tk.DISABLED,
+        )
+        self.continue_button.pack(side=tk.RIGHT, padx=(8, 0))
         ttk.Button(self.acciones_frame, text="Limpiar log", command=self._limpiar_log).pack(side=tk.RIGHT, padx=(8, 0))
 
         log_frame = ttk.LabelFrame(main, text="Salida")
@@ -1361,6 +1379,8 @@ class SkyBotGUI:
 
         ambiente_code = self._ambiente_code_from_label(self.ambiente_var.get())
         cmd = [PYTHON_EXEC, "-u", str(PROJECT_ROOT / "test_sky.py")]
+        if self.control_dir_actual:
+            cmd.extend(["--control-dir", str(self.control_dir_actual)])
         cmd.extend(["--market", market_code])
         cmd.extend(["--ambiente", ambiente_code])
         cmd.extend(["--tipo-viaje", tipo_viaje_code])
@@ -1424,6 +1444,54 @@ class SkyBotGUI:
 
         return cmd
 
+    def _preparar_control_dir(self):
+        CONTROL_ROOT.mkdir(parents=True, exist_ok=True)
+        self.control_dir_actual = Path(tempfile.mkdtemp(prefix="run_", dir=str(CONTROL_ROOT)))
+        self.pausa_solicitada = False
+
+    def _control_path(self, nombre):
+        if not self.control_dir_actual:
+            return None
+        return self.control_dir_actual / nombre
+
+    def _escribir_control(self, nombre, contenido=""):
+        path = self._control_path(nombre)
+        if not path:
+            return
+        path.write_text(contenido, encoding="utf-8")
+
+    def _borrar_control(self, nombre):
+        path = self._control_path(nombre)
+        if not path:
+            return
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return
+
+    def _pausar_para_edicion(self):
+        if not self.process or self.process.poll() is not None:
+            self.status_var.set("No hay ejecución activa para pausar")
+            return
+        if not self.control_dir_actual:
+            self.status_var.set("No hay control de ejecución disponible")
+            return
+        self._escribir_control("pause.request", "pause\n")
+        self.pausa_solicitada = True
+        self.pause_button.configure(state=tk.DISABLED)
+        self.status_var.set("Pausa solicitada; esperando punto seguro...")
+        self._append_log("⏸️ Pausa para edición solicitada.")
+
+    def _continuar_despues_edicion(self):
+        if not self.control_dir_actual:
+            self.status_var.set("No hay ejecución pausada")
+            return
+        self._escribir_control("continue.request", "continue\n")
+        self.continue_button.configure(state=tk.DISABLED)
+        self.pause_button.configure(state=tk.NORMAL if self.process and self.process.poll() is None else tk.DISABLED)
+        self.status_var.set("Continuando ejecución...")
+        self._append_log("▶️ Continuando después de edición manual.")
+
     def _iniciar_ejecucion(self):
         if self.process and self.process.poll() is None:
             messagebox.showwarning("Ejecución en curso", "Ya hay una ejecución activa.")
@@ -1437,6 +1505,7 @@ class SkyBotGUI:
             return
 
         try:
+            self._preparar_control_dir()
             cmd = self._construir_comando()
         except ValueError as error:
             messagebox.showerror("Validación", str(error))
@@ -1451,6 +1520,8 @@ class SkyBotGUI:
         self.status_var.set("Iniciando ejecución...")
         self.run_button.configure(state=tk.DISABLED)
         self.stop_button.configure(state=tk.NORMAL)
+        self.pause_button.configure(state=tk.NORMAL)
+        self.continue_button.configure(state=tk.DISABLED)
 
         worker = threading.Thread(target=self._ejecutar_proceso, args=(cmd, log_limpio), daemon=True)
         worker.start()
@@ -1529,6 +1600,8 @@ class SkyBotGUI:
             self.status_var.set("No hay ejecución activa")
             return
         self._append_log("⏹️ Solicitando detener proceso...")
+        self._borrar_control("pause.request")
+        self._borrar_control("continue.request")
         self.process.terminate()
         self.status_var.set("Deteniendo...")
         self.root.after(3000, self._forzar_stop_si_sigue)
@@ -1539,6 +1612,7 @@ class SkyBotGUI:
             self.process.kill()
 
     def _procesar_cola(self):
+        self._actualizar_estado_pausa()
         while True:
             try:
                 kind, payload = self.queue.get_nowait()
@@ -1551,8 +1625,26 @@ class SkyBotGUI:
             elif kind == "done":
                 self.run_button.configure(state=tk.NORMAL)
                 self.stop_button.configure(state=tk.DISABLED)
+                self.pause_button.configure(state=tk.DISABLED)
+                self.continue_button.configure(state=tk.DISABLED)
                 self.process = None
+                self.pausa_solicitada = False
         self.root.after(120, self._procesar_cola)
+
+    def _actualizar_estado_pausa(self):
+        paused_file = self._control_path("paused.state")
+        esta_pausado = bool(paused_file and paused_file.exists())
+        proceso_activo = bool(self.process and self.process.poll() is None)
+
+        if esta_pausado:
+            self.pause_button.configure(state=tk.DISABLED)
+            self.continue_button.configure(state=tk.NORMAL)
+            self.status_var.set("Pausado para edición manual")
+            return
+
+        if proceso_activo:
+            self.pause_button.configure(state=tk.NORMAL)
+            self.continue_button.configure(state=tk.DISABLED)
 
     def _append_log(self, text):
         self.log_text.insert(tk.END, f"{text}\n")

@@ -75,3 +75,16 @@ Objetivo:
   - mayor riesgo de regresiones por ambiente.
 - Causa raíz sugerida:
   - mover selectores/versiones a un módulo dedicado por pantalla.
+
+### P1 · Checkout puede ocultar pasarelas detrás de `Más medios de pago`
+
+- En checkout PE se detectó que la lista de pasarelas puede venir colapsada detrás del botón `Más medios de pago`.
+- Impacto:
+  - el bot no encontraba Niubiz/Webpay/Cielo aunque el contenido sí estuviera presente en DOM,
+  - la carga de tarjeta fallaba por no abrir ese paso intermedio.
+- Fix táctico aplicado:
+  - expansión automática del bloque de medios de pago antes de seleccionar la pasarela,
+  - espera tolerante para layouts donde la pasarela tarda en quedar visible.
+- Causa raíz sugerida:
+  - centralizar selectores del checkout,
+  - validar explícitamente estado expandido/colapsado de la sección en vez de depender de texto visible.

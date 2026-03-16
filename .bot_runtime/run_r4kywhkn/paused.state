@@ -1,0 +1,4 @@
+stage=CHECKOUT
+url=https://initial-sale-stage.skyairline.com/es/chile/checkout
+context=post_confirmacion
+timestamp=2026-03-16T10:50:21.703910
